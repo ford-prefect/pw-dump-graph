@@ -79,17 +79,21 @@ export function attachInteractions(
   const nodeEls = new Map<number, Element>();
   scene.querySelectorAll<Element>(".node-group").forEach((g) => nodeEls.set(Number(g.getAttribute("data-node-id")), g));
 
+  // Additive only: hovering brightens the node and its links, it never dims the
+  // rest of the graph — a whole-canvas opacity change on every pointer move is
+  // too distracting to read around.
   function clearHi() {
-    scene.classList.remove("has-hover");
     scene.querySelectorAll(".hi").forEach((n) => n.classList.remove("hi"));
   }
   function highlightNode(id: number) {
     clearHi();
-    scene.classList.add("has-hover");
     nodeEls.get(id)?.classList.add("hi");
     for (const eid of nodeEdges.get(id) ?? []) {
       const edge = edgeEls.get(eid);
       edge?.classList.add("hi");
+      // Raise it within the edge layer so it reads over its neighbours instead
+      // of relying on everything else fading out.
+      if (edge) edge.parentNode?.appendChild(edge);
       // also light up the node at the other end
       const from = Number(edge?.getAttribute("data-from"));
       const to = Number(edge?.getAttribute("data-to"));

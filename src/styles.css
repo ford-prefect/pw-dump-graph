@@ -5,13 +5,12 @@
   --toolbar: #171b22;
   --text: #d7dce3;
   --muted: #8a94a3;
-  --edge: #6f7b8c;
+  --edge: #7c8899;
   --edge-hi: #ffcf5c;
   --port: #b9c2cf;
   --node-bg: #1e242e;
   --node-header: #262e3a;
   --node-stroke: #333c49;
-  --dim: 0.18;
 }
 
 * { box-sizing: border-box; }
@@ -117,13 +116,14 @@ html, body {
   stroke: var(--edge);
   stroke-width: 1.5;
   stroke-linecap: round;
+  opacity: 0.85;
 }
 
-/* highlight / dim states driven by interact.ts */
-.scene.has-hover .node-group:not(.hi) { opacity: var(--dim); }
-.scene.has-hover .edge:not(.hi) { opacity: var(--dim); }
-.edge.hi { stroke: var(--edge-hi); stroke-width: 2.5; }
-.node-group.hi .node-box { stroke: var(--edge-hi); }
+/* Hover highlight (interact.ts). Purely additive — nothing is dimmed, so the
+   rest of the graph stays readable while pointing at a node. */
+.edge.hi { stroke: var(--edge-hi); stroke-width: 2.5; opacity: 1; }
+.node-group.hi .node-box { stroke: var(--edge-hi); stroke-width: 1.75; }
+.node-group.hi .node-title { fill: #fff; }
 
 .node-group { cursor: pointer; }
 
