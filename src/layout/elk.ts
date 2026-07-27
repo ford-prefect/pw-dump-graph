@@ -29,6 +29,19 @@ function groupLabel(id: string): string {
   return id.replace(/(-\d+)+$/, "") || id;
 }
 
+/** A node's dataflow lane and which side of it, inferred from media.class. Used to
+ *  pair the two halves of a group on the same row: playback flows Audio/Sink ->
+ *  Stream/Output, capture flows Stream/Input -> Audio/Source. Nodes with an
+ *  unrecognised class get their own lane (a standalone row). */
+function laneRole(n: Node): { lane: string; side: "in" | "out" } | undefined {
+  const mc = n.mediaClass ?? "";
+  if (mc.startsWith("Audio/Sink")) return { lane: "pb", side: "in" };
+  if (mc.startsWith("Stream/Output")) return { lane: "pb", side: "out" };
+  if (mc.startsWith("Stream/Input")) return { lane: "cap", side: "in" };
+  if (mc.startsWith("Audio/Source")) return { lane: "cap", side: "out" };
+  return undefined;
+}
+
 function portLabel(p: Port): string {
   return p.channel ?? p.name;
 }
@@ -141,22 +154,29 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
 
   // A group container has no real edges between its members (the connection is
   // internal), so elk would stack them vertically. Add invisible node-to-node
-  // ordering edges from the input side (sink-like, input ports only) to the output
-  // side (source-like, output ports only) so the box lays out left→right, matching
-  // a node's own inputs-left / outputs-right convention. Skipped when rendering.
+  // ordering edges within each dataflow lane (see laneRole) from the input side to
+  // the output side. This lays each lane out left→right AND, because different
+  // lanes share no edge, puts each lane on its own row — so a 4-node echo-cancel
+  // reads as [sink → playback] above [capture → source] with no special-casing.
+  // The fallback (unknown class) orders a node by its own ports. Skipped in render.
   const hintEdgeIds = new Set<string>();
   let hintId = 0;
   for (const g of graph.groups) {
-    const members = g.nodeIds.map((id) => graph.nodes.get(id)).filter((n): n is Node => !!n);
-    const hasIn = (n: Node) => n.ports.some((p) => p.direction === "in");
-    const hasOut = (n: Node) => n.ports.some((p) => p.direction === "out");
-    const left = members.filter((n) => hasIn(n) && !hasOut(n));
-    const mid = members.filter((n) => hasIn(n) && hasOut(n));
-    const right = members.filter((n) => hasOut(n) && !hasIn(n));
-    const tiers = [left, mid, right].filter((t) => t.length > 0);
-    for (let i = 0; i + 1 < tiers.length; i++) {
-      for (const a of tiers[i]) {
-        for (const b of tiers[i + 1]) {
+    const lanes = new Map<string, { ins: Node[]; outs: Node[] }>();
+    for (const id of g.nodeIds) {
+      const n = graph.nodes.get(id);
+      if (!n) continue;
+      const role = laneRole(n);
+      const lane = role?.lane ?? `solo${id}`;
+      const side =
+        role?.side ??
+        (n.ports.some((p) => p.direction === "out") && !n.ports.some((p) => p.direction === "in") ? "out" : "in");
+      const bucket = lanes.get(lane) ?? lanes.set(lane, { ins: [], outs: [] }).get(lane)!;
+      (side === "in" ? bucket.ins : bucket.outs).push(n);
+    }
+    for (const { ins, outs } of lanes.values()) {
+      for (const a of ins) {
+        for (const b of outs) {
           const eid = `h${hintId++}`;
           hintEdgeIds.add(eid);
           edges.push({ id: eid, sources: [`n${a.id}`], targets: [`n${b.id}`] });
