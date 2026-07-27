@@ -111,6 +111,17 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
       "elk.spacing.nodeNode": "48",
       "elk.spacing.edgeNode": "24",
       "elk.layered.spacing.edgeNodeBetweenLayers": "30",
+      // A pw graph is usually several unrelated chains (a webcam pair, a browser
+      // stream, the MIDI bridge...). Separating components much more than
+      // spacing.nodeNode is what makes those read as distinct subgraphs rather
+      // than one tall stack.
+      "elk.separateConnectedComponents": "true",
+      "elk.spacing.componentComponent": "130",
+      // Components are otherwise packed into one tall column, so fit-view has to
+      // shrink the whole graph to fit a landscape window. The target is only
+      // approximate — asking for 2.2 lands the example dump near 1.7, which fits
+      // at 1:1; anything under ~2 leaves the packing portrait and no-ops.
+      "elk.aspectRatio": "2.2",
       "elk.edgeRouting": "SPLINES",
     },
     children,
