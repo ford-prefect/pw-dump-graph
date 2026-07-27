@@ -131,13 +131,27 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
     });
   });
 
+  // Pure sources (no incoming link, has output ports) are pinned to the first
+  // layer so every capture/playback chain starts at the left edge — otherwise
+  // network-simplex pulls a source (e.g. the mic) rightward next to its consumer,
+  // burying it mid-graph. Only ungrouped nodes; grouped ones are placed by their
+  // container.
+  const consumers = new Set(graph.links.map((l) => l.inNode));
+  const isSource = (n: Node) => !consumers.has(n.id) && n.ports.some((p) => p.direction === "out");
+
   const children: ElkNode[] = [];
   for (const node of graph.nodes.values()) {
     const elkNode = makeNode(node);
     const gid = groupOf.get(node.id);
     const container = gid ? containers.get(gid) : undefined;
-    if (container) container.children!.push(elkNode);
-    else children.push(elkNode);
+    if (container) {
+      container.children!.push(elkNode);
+    } else {
+      if (isSource(node)) {
+        elkNode.layoutOptions = { ...elkNode.layoutOptions, "elk.layered.layering.layerConstraint": "FIRST" };
+      }
+      children.push(elkNode);
+    }
   }
   children.push(...containers.values());
 
