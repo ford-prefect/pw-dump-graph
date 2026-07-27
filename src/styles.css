@@ -1,0 +1,165 @@
+:root {
+  --bg: #14171c;
+  --grid: #1c2027;
+  --toolbar: #1a1e25;
+  --text: #d7dce3;
+  --muted: #8a94a3;
+  --edge: #6f7b8c;
+  --edge-hi: #ffcf5c;
+  --port: #b9c2cf;
+  --node-stroke: #2c333d;
+  --dim: 0.18;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--toolbar);
+  border-bottom: 1px solid #000;
+  user-select: none;
+}
+#toolbar .title { font-weight: 600; letter-spacing: 0.02em; }
+#toolbar .status { margin-left: auto; color: var(--muted); }
+
+.file-btn, #toolbar button {
+  background: #262c35;
+  color: var(--text);
+  border: 1px solid #333b46;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.file-btn:hover, #toolbar button:hover { background: #2f3742; }
+
+#stage {
+  position: absolute;
+  inset: 44px 0 0 0;
+  overflow: hidden;
+}
+
+#canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  cursor: grab;
+}
+#canvas.panning { cursor: grabbing; }
+
+#dropzone-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  pointer-events: none;
+  font-size: 15px;
+}
+#dropzone-hint code { color: var(--text); }
+#stage.has-graph #dropzone-hint { display: none; }
+#stage.drag-over { outline: 3px dashed #3d7bd1; outline-offset: -8px; }
+
+/* ---- graph elements (scene is transformed via <g id="scene">) ---- */
+.node-box { fill: #232935; stroke: var(--node-stroke); stroke-width: 1; rx: 7; }
+.node-title {
+  fill: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+.node-sub {
+  fill: var(--muted);
+  font-size: 10px;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+.node-accent { stroke-width: 4; }
+
+.port-dot { fill: var(--port); stroke: #0c0f13; stroke-width: 1; }
+.port-dot.monitor { fill: #b07be0; }
+.port-label {
+  fill: var(--muted);
+  font-size: 10px;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+
+.edge {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+/* highlight / dim states driven by interact.ts */
+.scene.has-hover .node-group:not(.hi) { opacity: var(--dim); }
+.scene.has-hover .edge:not(.hi) { opacity: var(--dim); }
+.edge.hi { stroke: var(--edge-hi); stroke-width: 2.5; }
+.node-group.hi .node-box { stroke: var(--edge-hi); }
+
+.node-group { cursor: pointer; }
+
+#details {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  background: #1a1e25ee;
+  border: 1px solid #333b46;
+  border-radius: 8px;
+  padding: 12px 14px;
+  backdrop-filter: blur(3px);
+}
+#details h3 { margin: 0 0 4px; font-size: 14px; }
+#details .close { position: absolute; top: 8px; right: 10px; cursor: pointer; color: var(--muted); }
+#details table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+#details td { padding: 2px 4px; vertical-align: top; }
+#details td.k { color: var(--muted); white-space: nowrap; padding-right: 10px; }
+#details .section { margin-top: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+
+dialog {
+  background: #1a1e25;
+  color: var(--text);
+  border: 1px solid #333b46;
+  border-radius: 10px;
+  width: min(680px, 90vw);
+}
+dialog::backdrop { background: #000a; }
+dialog h3 { margin-top: 0; }
+dialog textarea {
+  width: 100%;
+  background: #0f1216;
+  color: var(--text);
+  border: 1px solid #333b46;
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  padding: 8px;
+}
+dialog menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
+dialog menu button {
+  background: #262c35; color: var(--text);
+  border: 1px solid #333b46; border-radius: 6px; padding: 6px 14px; cursor: pointer; font: inherit;
+}

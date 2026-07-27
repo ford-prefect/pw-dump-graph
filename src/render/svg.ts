@@ -1,0 +1,172 @@
+// Layer 4 — SVG renderer.
+// Consumes ONLY the neutral PositionedGraph (for geometry) plus the domain Graph
+// (for labels/classes). It must NEVER import elkjs or any layout library.
+
+import type { Graph, Node, Port } from "../model.js";
+import type { PositionedGraph } from "../layout/types.js";
+
+const SVGNS = "http://www.w3.org/2000/svg";
+
+// media.class family -> accent color. Absent/unknown falls into "other".
+function accentFor(mediaClass?: string): string {
+  const c = mediaClass ?? "";
+  if (c.startsWith("Audio/Sink")) return "#4a90d9";
+  if (c.startsWith("Audio/Source")) return "#5fb56f";
+  if (c.startsWith("Stream/Output")) return "#57c3c7";
+  if (c.startsWith("Stream/Input")) return "#c78bd8";
+  if (c.startsWith("Video")) return "#e0913a";
+  if (c.startsWith("Midi")) return "#d86fa0";
+  return "#7c8797"; // Other (incl. driver nodes with no media.class)
+}
+
+function el<K extends keyof SVGElementTagNameMap>(
+  name: K,
+  attrs: Record<string, string | number> = {},
+): SVGElementTagNameMap[K] {
+  const node = document.createElementNS(SVGNS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  return node;
+}
+
+function truncate(text: string, maxChars: number): string {
+  return text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
+}
+
+/** Convert a polyline (elk spline control points) into a smooth path string. */
+function smoothPath(points: { x: number; y: number }[]): string {
+  if (points.length < 2) return "";
+  if (points.length === 2) {
+    const [a, b] = points;
+    const dx = Math.max(30, Math.abs(b.x - a.x) * 0.5);
+    return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
+  }
+  // Catmull-Rom -> cubic bezier through all points.
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] ?? points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+  }
+  return d;
+}
+
+function renderNode(node: Node, laid: PositionedGraph["nodes"][number]): SVGGElement {
+  const g = el("g", { class: "node-group", "data-node-id": node.id });
+  const accent = accentFor(node.mediaClass);
+
+  g.appendChild(el("rect", { class: "node-box", x: laid.x, y: laid.y, width: laid.w, height: laid.h, rx: 7 }));
+  g.appendChild(
+    el("line", {
+      class: "node-accent",
+      x1: laid.x + 2,
+      y1: laid.y + 8,
+      x2: laid.x + 2,
+      y2: laid.y + laid.h - 8,
+      stroke: accent,
+    }),
+  );
+
+  const title = el("text", { class: "node-title", x: laid.x + 12, y: laid.y + (node.mediaClass ? 13 : 18) });
+  title.textContent = truncate(node.name, Math.floor((laid.w - 18) / 6.5));
+  g.appendChild(title);
+  if (node.mediaClass) {
+    const sub = el("text", { class: "node-sub", x: laid.x + 12, y: laid.y + 25 });
+    sub.textContent = node.mediaClass;
+    g.appendChild(sub);
+  }
+
+  for (const lp of laid.ports) {
+    const port = node.ports.find((p) => p.id === lp.id);
+    if (!port) continue;
+    const dot = el("circle", {
+      class: port.monitor ? "port-dot monitor" : "port-dot",
+      cx: lp.x,
+      cy: lp.y,
+      r: 4,
+      "data-port-id": port.id,
+    });
+    g.appendChild(dot);
+
+    const inside = lp.side === "in";
+    const label = el("text", {
+      class: "port-label",
+      x: inside ? lp.x + 8 : lp.x - 8,
+      y: lp.y,
+      "text-anchor": inside ? "start" : "end",
+    });
+    label.textContent = truncate(port.channel ?? port.name, 18);
+    g.appendChild(label);
+  }
+  return g;
+}
+
+export interface RenderResult {
+  sceneEl: SVGGElement;
+}
+
+/** Draw the whole graph into `svg`, returning the transformable scene group. */
+export function renderGraph(svg: SVGSVGElement, graph: Graph, positioned: PositionedGraph): RenderResult {
+  svg.replaceChildren();
+  const scene = el("g", { class: "scene" });
+
+  // Edges first (behind nodes).
+  const edgeLayer = el("g", { class: "edge-layer" });
+  for (const e of positioned.edges) {
+    const path = el("path", {
+      class: "edge",
+      d: smoothPath(e.points),
+      "data-edge-id": e.id,
+      "data-from": e.from,
+      "data-to": e.to,
+    });
+    edgeLayer.appendChild(path);
+  }
+  scene.appendChild(edgeLayer);
+
+  // Nodes on top.
+  const nodeLayer = el("g", { class: "node-layer" });
+  for (const laid of positioned.nodes) {
+    const node = graph.nodes.get(laid.id);
+    if (!node) continue;
+    nodeLayer.appendChild(renderNode(node, laid));
+  }
+  scene.appendChild(nodeLayer);
+
+  svg.appendChild(scene);
+  return { sceneEl: scene };
+}
+
+/** Render a node's details into the side panel body. */
+export function nodeDetailsHTML(node: Node): string {
+  const row = (k: string, v: string) => `<tr><td class="k">${esc(k)}</td><td>${esc(v)}</td></tr>`;
+  const portRow = (p: Port) =>
+    `<tr><td class="k">${p.direction === "out" ? "▸" : "◂"} ${esc(p.channel ?? p.name)}</td><td>${esc(p.format ?? "")}</td></tr>`;
+
+  const keyProps = ["media.class", "node.name", "node.description", "object.serial", "client.id"];
+  const propRows = keyProps
+    .filter((k) => node.props[k] !== undefined)
+    .map((k) => row(k, String(node.props[k])))
+    .join("");
+
+  const ports = node.ports.map(portRow).join("") || `<tr><td colspan="2">(no ports)</td></tr>`;
+
+  return `
+    <span class="close">✕</span>
+    <h3>${esc(node.name)}</h3>
+    <div>id ${node.id}</div>
+    <div class="section">Properties</div>
+    <table>${propRows}</table>
+    <div class="section">Ports (${node.ports.length})</div>
+    <table>${ports}</table>
+  `;
+}
+
+function esc(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+}

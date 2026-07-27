@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pw-dump-graph</title>
+  </head>
+  <body>
+    <header id="toolbar">
+      <span class="title">pw-dump-graph</span>
+      <label class="file-btn">
+        Open file…
+        <input id="file-input" type="file" accept=".json,application/json" hidden />
+      </label>
+      <button id="paste-btn" type="button">Paste JSON…</button>
+      <span id="status" class="status"></span>
+    </header>
+
+    <main id="stage">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="dropzone-hint">Drop a <code>pw-dump.json</code> here</div>
+      <aside id="details" hidden></aside>
+    </main>
+
+    <dialog id="paste-dialog">
+      <form method="dialog">
+        <h3>Paste pw-dump JSON</h3>
+        <textarea id="paste-area" rows="16" placeholder="pw-dump  |  (paste the JSON array here)"></textarea>
+        <menu>
+          <button value="cancel">Cancel</button>
+          <button id="paste-load" value="load" type="button">Render</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
