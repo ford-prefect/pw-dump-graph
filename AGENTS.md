@@ -55,6 +55,13 @@ npm run typecheck  # tsc --noEmit
 - Prefer verifying model/layout changes headlessly (they are DOM-free); render/interact
   need a DOM.
 
+## Commits
+
+- Work in small, atomic commits: one self-contained change each, with the tree
+  building and typechecking at every commit. Land a refactor separately from the
+  behaviour change that motivated it.
+- No `Co-Authored-By:` (or similar attribution) trailers in commit messages.
+
 ## Not yet implemented (deferred by design)
 
 - Port groups (n:1): cluster by `Port.group`.
