@@ -102,6 +102,27 @@ function buildLink(raw: RawObject): Link | undefined {
   return { id: raw.id, outNode, outPort, inNode, inPort, state: str(info.state) };
 }
 
+// Canonical channel order (WAV/PipeWire convention) so every node stacks its
+// ports the same way (FL above FR, etc.). Object ids do NOT follow channel order
+// — e.g. a node may have FR at a lower id than FL — so ordering by id leaves
+// matching channels on mismatched rows and forces links to cross. Ordering by
+// channel keeps FL→FL / FR→FR runs parallel.
+const CHANNEL_ORDER = [
+  "MONO",
+  "FL", "FR", "FC", "LFE", "RL", "RR", "RC", "SL", "SR",
+  "FLC", "FRC", "TC", "TFL", "TFC", "TFR", "TRL", "TRC", "TRR",
+];
+const CHANNEL_RANK = new Map(CHANNEL_ORDER.map((c, i) => [c, i]));
+
+function channelRank(ch?: string): number {
+  if (!ch) return Number.MAX_SAFE_INTEGER; // no channel (e.g. MIDI) — fall back to id
+  const known = CHANNEL_RANK.get(ch);
+  if (known !== undefined) return known;
+  const aux = /^AUX(\d+)$/.exec(ch); // AUX0, AUX1, … kept in numeric order after named channels
+  if (aux) return 1000 + Number(aux[1]);
+  return 900; // other named channels: grouped, before AUX, then by id
+}
+
 /** Build the domain graph from grouped raw records. */
 export function buildGraphFromGroups(groups: RawGroups): Graph {
   const nodes = new Map<number, Node>();
@@ -116,11 +137,16 @@ export function buildGraphFromGroups(groups: RawGroups): Graph {
     nodes.get(port.nodeId)?.ports.push(port);
   }
 
-  // Deterministic port order within a node: outputs then inputs, then by id.
+  // Deterministic port order within a node: outputs then inputs, then by
+  // canonical channel (FL before FR, …), then id. Channel-first ordering keeps
+  // the same channel on the same row across nodes so links don't needlessly cross.
   for (const node of nodes.values()) {
-    node.ports.sort((a, b) =>
-      a.direction === b.direction ? a.id - b.id : a.direction === "out" ? -1 : 1,
-    );
+    node.ports.sort((a, b) => {
+      if (a.direction !== b.direction) return a.direction === "out" ? -1 : 1;
+      const ra = channelRank(a.channel);
+      const rb = channelRank(b.channel);
+      return ra !== rb ? ra - rb : a.id - b.id;
+    });
   }
 
   const links: Link[] = [];
