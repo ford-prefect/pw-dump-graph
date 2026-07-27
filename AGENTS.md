@@ -50,8 +50,9 @@ npm run typecheck  # tsc --noEmit
 ## Verifying changes
 
 - `npm run typecheck` and `npm run build` must pass.
-- Sanity-check against `examples/pw-dump.json`: 12 nodes, 24 ports, 7 links; driver
-  nodes (`Dummy-Driver`, `Freewheel-Driver`) have no ports.
+- Sanity-check against a real `pw-dump`: nodes render as boxes with input ports on the
+  left / output ports on the right; nodes sharing a `node.link-group` (filter chains,
+  loopbacks, echo-cancel) render inside a labelled box, laid out `source → filter → sink`.
 - Prefer verifying model/layout changes headlessly (they are DOM-free); render/interact
   need a DOM.
 
@@ -64,5 +65,6 @@ npm run typecheck  # tsc --noEmit
 
 ## Not yet implemented (deferred by design)
 
-- Port groups (n:1): cluster by `Port.group`.
+- Port groups (n:1): cluster by `Port.group` (distinct from `node.link-group`, which
+  is already grouped into boxes).
 - Upload service: Node.js endpoint for `pw-dump | curl host`; viewer already supports `?url=`.

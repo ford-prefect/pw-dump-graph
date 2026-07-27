@@ -84,6 +84,23 @@ html, body {
 #stage.drag-over { outline: 3px dashed #3d7bd1; outline-offset: -8px; }
 
 /* ---- graph elements (scene is transformed via <g id="scene">) ---- */
+/* Group box: nodes the session manager keeps internally linked (filter chains,
+   loopbacks). Drawn behind the nodes as a labelled translucent container. */
+.group-box {
+  fill: #ffffff08;
+  stroke: #46506080;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.group-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
 .node-box { fill: var(--node-bg); stroke: var(--node-stroke); stroke-width: 1; rx: 7; }
 .node-header { fill: var(--node-header); pointer-events: none; }
 .node-divider { stroke: var(--node-stroke); stroke-width: 1; pointer-events: none; }

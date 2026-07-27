@@ -23,6 +23,7 @@ export interface Node {
   id: number;
   name: string; // node.description || node.name || "node <id>"
   mediaClass?: string; // media.class (absent for driver nodes)
+  linkGroup?: string; // node.link-group — nodes sharing one are internally linked
   ports: Port[]; // may be empty (e.g. driver nodes)
   props: Record<string, unknown>;
 }
@@ -36,10 +37,19 @@ export interface Link {
   state?: string;
 }
 
+/** Nodes the session manager keeps internally linked (a filter-chain's sink+source,
+ *  a loopback's capture+playback, an echo-cancel unit). PipeWire never draws Links
+ *  between them; we box them together instead. */
+export interface NodeGroup {
+  id: string; // the shared node.link-group value
+  nodeIds: number[];
+}
+
 export interface Graph {
   nodes: Map<number, Node>;
   ports: Map<number, Port>;
   links: Link[];
+  groups: NodeGroup[];
 }
 
 function str(v: unknown): string | undefined {
@@ -63,6 +73,7 @@ function buildNode(raw: RawObject): Node {
     id: raw.id,
     name,
     mediaClass: str(props["media.class"]),
+    linkGroup: str(props["node.link-group"]),
     ports: [],
     props,
   };
@@ -152,10 +163,27 @@ export function buildGraphFromGroups(groups: RawGroups): Graph {
   const links: Link[] = [];
   for (const raw of groups.links) {
     const link = buildLink(raw);
-    if (link) links.push(link);
+    if (!link) continue;
+    // Drop links internal to a link-group. PipeWire doesn't create these (the
+    // connection is internal), but if a dump ever carries one we don't want to
+    // draw a line inside a box that's already meant to imply the relationship.
+    const lg = nodes.get(link.outNode)?.linkGroup;
+    if (lg && lg === nodes.get(link.inNode)?.linkGroup) continue;
+    links.push(link);
   }
 
-  return { nodes, ports, links };
+  // Collect link-groups (only those with >1 member — a lone node needs no box).
+  const byGroup = new Map<string, number[]>();
+  for (const node of nodes.values()) {
+    if (!node.linkGroup) continue;
+    (byGroup.get(node.linkGroup) ?? byGroup.set(node.linkGroup, []).get(node.linkGroup)!).push(node.id);
+  }
+  const nodeGroups: NodeGroup[] = [];
+  for (const [id, nodeIds] of byGroup) {
+    if (nodeIds.length > 1) nodeGroups.push({ id, nodeIds });
+  }
+
+  return { nodes, ports, links, groups: nodeGroups };
 }
 
 /** Convenience: raw parsed JSON (array) → domain graph. */

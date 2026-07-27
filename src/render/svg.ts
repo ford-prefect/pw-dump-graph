@@ -200,13 +200,27 @@ export interface RenderResult {
   sceneEl: SVGGElement;
 }
 
+function renderGroup(box: PositionedGraph["groups"][number]): SVGGElement {
+  const g = el("g", { class: "group-group", "data-group-id": box.id });
+  g.appendChild(el("rect", { class: "group-box", x: box.x, y: box.y, width: box.w, height: box.h, rx: 10 }));
+  const label = el("text", { class: "group-label", x: box.x + 12, y: box.y + 18 });
+  label.textContent = box.label;
+  g.appendChild(label);
+  return g;
+}
+
 /** Draw the whole graph into `svg`, returning the transformable scene group. */
 export function renderGraph(svg: SVGSVGElement, graph: Graph, positioned: PositionedGraph): RenderResult {
   svg.replaceChildren();
   renderBackdrop(svg);
   const scene = el("g", { class: "scene" });
 
-  // Edges first (behind nodes).
+  // Group boxes at the very back, so nodes and edges draw on top of them.
+  const groupLayer = el("g", { class: "group-layer" });
+  for (const box of positioned.groups) groupLayer.appendChild(renderGroup(box));
+  scene.appendChild(groupLayer);
+
+  // Edges next (behind nodes).
   const edgeLayer = el("g", { class: "edge-layer" });
   for (const e of positioned.edges) {
     const path = el("path", {

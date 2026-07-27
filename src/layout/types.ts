@@ -32,9 +32,21 @@ export interface LaidOutEdge {
   points: { x: number; y: number }[]; // polyline in scene coordinates
 }
 
+/** A bounding box enclosing an internally-linked group of nodes, in absolute
+ *  scene coordinates. The renderer draws it behind the member nodes. */
+export interface LaidOutGroup {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface PositionedGraph {
   nodes: LaidOutNode[];
   edges: LaidOutEdge[];
+  groups: LaidOutGroup[];
   width: number;
   height: number;
 }

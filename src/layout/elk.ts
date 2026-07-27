@@ -5,7 +5,7 @@
 
 import ELK, { type ElkNode, type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import type { Direction, Graph, Node, Port } from "../model.js";
-import type { LaidOutEdge, LaidOutNode, LaidOutPort, LayoutEngine, PositionedGraph } from "./types.js";
+import type { LaidOutEdge, LaidOutGroup, LaidOutNode, LaidOutPort, LayoutEngine, PositionedGraph } from "./types.js";
 
 // --- box sizing (kept here so the renderer just honours the geometry) ---
 // The header band is reserved space: port rows start below it, so a node's
@@ -20,6 +20,14 @@ const MID_GAP = 44; // clear space between the in- and out-label columns
 const MIN_W = 160;
 const MAX_W = 340;
 const PORT_LABEL_CAP = 22; // cap chars of a port label counted toward width
+const GROUP_PAD_TOP = 28; // top inset of a group box, reserved for its label
+const GROUP_PAD = 16; // left/right/bottom inset of a group box
+
+/** Turn a raw node.link-group id ("echo-cancel-9549-32") into a readable label
+ *  ("echo-cancel") by dropping the trailing numeric id segments. */
+function groupLabel(id: string): string {
+  return id.replace(/(-\d+)+$/, "") || id;
+}
 
 function portLabel(p: Port): string {
   return p.channel ?? p.name;
@@ -60,18 +68,17 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
   // dot the renderer draws; keeping the map avoids trusting elk's echoed coords.
   const centres = new Map<number, { dx: number; dy: number }>();
 
-  const children: ElkNode[] = [];
-  for (const node of graph.nodes.values()) {
+  // Build one elk box per node. Ports sit at fixed positions on our own rows
+  // (see portRowY) so the stubs clear the header band and match the renderer.
+  const makeNode = (node: Node): ElkNode => {
     const { w, h } = nodeSize(node);
-    // FIXED_POS (rather than FIXED_SIDE): we place the stubs on our own rows so
-    // they clear the header band and line up with the labels the renderer draws.
-    // The cost is that elk no longer reorders ports to reduce crossings — worth
-    // it for stable rows in declaration order (FL before FR, etc.).
     const rowIndex = { in: 0, out: 0 };
-    children.push({
+    return {
       id: `n${node.id}`,
       width: w,
       height: h,
+      // FIXED_POS: we own the row placement; the cost is elk no longer reorders
+      // ports to reduce crossings, which is fine — model.ts already channel-sorts.
       layoutOptions: { "elk.portConstraints": "FIXED_POS" },
       ports: node.ports.map((p) => {
         sides.set(p.id, p.direction);
@@ -88,8 +95,38 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
           layoutOptions: { "elk.port.side": elkPortSide(p.direction) },
         };
       }),
+    };
+  };
+
+  // Internally-linked nodes go inside an elk compound container so they lay out
+  // together and yield a bounding box; everything else stays at the root.
+  const groupOf = new Map<number, string>();
+  for (const g of graph.groups) for (const id of g.nodeIds) groupOf.set(id, g.id);
+
+  const groupMeta = new Map<string, { id: string; label: string }>(); // elk id -> group
+  const containers = new Map<string, ElkNode>(); // group id -> elk container
+  graph.groups.forEach((g, i) => {
+    const cid = `grp${i}`;
+    groupMeta.set(cid, { id: g.id, label: groupLabel(g.id) });
+    containers.set(g.id, {
+      id: cid,
+      layoutOptions: {
+        "elk.padding": `[top=${GROUP_PAD_TOP},left=${GROUP_PAD},bottom=${GROUP_PAD},right=${GROUP_PAD}]`,
+        "elk.spacing.nodeNode": "36",
+      },
+      children: [],
     });
+  });
+
+  const children: ElkNode[] = [];
+  for (const node of graph.nodes.values()) {
+    const elkNode = makeNode(node);
+    const gid = groupOf.get(node.id);
+    const container = gid ? containers.get(gid) : undefined;
+    if (container) container.children!.push(elkNode);
+    else children.push(elkNode);
   }
+  children.push(...containers.values());
 
   // Only wire edges whose endpoints are real, laid-out ports.
   const edges: ElkExtendedEdge[] = [];
@@ -107,6 +144,10 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
     layoutOptions: {
       "elk.algorithm": "layered",
       "elk.direction": "RIGHT",
+      // Let the layered algorithm see across container boundaries so a group is
+      // ordered right next to the nodes it connects to (source -> filter -> sink)
+      // instead of being packed off on its own.
+      "elk.hierarchyHandling": "INCLUDE_CHILDREN",
       "elk.layered.spacing.nodeNodeBetweenLayers": "110",
       "elk.spacing.nodeNode": "48",
       "elk.spacing.edgeNode": "24",
@@ -130,49 +171,73 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
 
   const res = await elk.layout(root);
 
-  const outNodes: LaidOutNode[] = (res.children ?? []).map((c) => {
-    const nx = c.x ?? 0;
-    const ny = c.y ?? 0;
-    const ports: LaidOutPort[] = (c.ports ?? []).map((p) => {
-      const id = Number(String(p.id).slice(1));
-      const centre = centres.get(id);
-      return {
-        id,
-        x: nx + (centre?.dx ?? p.x ?? 0),
-        y: ny + (centre?.dy ?? p.y ?? 0),
-        side: sides.get(id) ?? "in",
-      };
-    });
-    return {
-      id: Number(String(c.id).slice(1)),
-      x: nx,
-      y: ny,
-      w: c.width ?? MIN_W,
-      h: c.height ?? HEADER_H,
-      headerH: HEADER_H,
-      ports,
-    };
-  });
+  // elk reports child coordinates relative to their parent container, so we walk
+  // the hierarchy accumulating offsets to get absolute scene coordinates.
+  const outNodes: LaidOutNode[] = [];
+  const outGroups: LaidOutGroup[] = [];
 
-  const outEdges: LaidOutEdge[] = (res.edges ?? []).map((e) => {
-    const section = e.sections?.[0];
-    const points: { x: number; y: number }[] = [];
-    if (section) {
-      points.push(section.startPoint);
-      for (const bp of section.bendPoints ?? []) points.push(bp);
-      points.push(section.endPoint);
+  const walkNodes = (parent: ElkNode, offX: number, offY: number): void => {
+    for (const c of parent.children ?? []) {
+      const ax = offX + (c.x ?? 0);
+      const ay = offY + (c.y ?? 0);
+      const meta = groupMeta.get(String(c.id));
+      if (meta) {
+        outGroups.push({ id: meta.id, label: meta.label, x: ax, y: ay, w: c.width ?? 0, h: c.height ?? 0 });
+        walkNodes(c, ax, ay);
+        continue;
+      }
+      const ports: LaidOutPort[] = (c.ports ?? []).map((p) => {
+        const id = Number(String(p.id).slice(1));
+        const centre = centres.get(id);
+        return {
+          id,
+          x: ax + (centre?.dx ?? p.x ?? 0),
+          y: ay + (centre?.dy ?? p.y ?? 0),
+          side: sides.get(id) ?? "in",
+        };
+      });
+      outNodes.push({
+        id: Number(String(c.id).slice(1)),
+        x: ax,
+        y: ay,
+        w: c.width ?? MIN_W,
+        h: c.height ?? HEADER_H,
+        headerH: HEADER_H,
+        ports,
+      });
     }
-    return {
-      id: Number(String(e.id).slice(1)),
-      from: Number(String(e.sources[0]).slice(1)),
-      to: Number(String(e.targets[0]).slice(1)),
-      points,
-    };
-  });
+  };
+  walkNodes(res, 0, 0);
+
+  // Edges live on their lowest common ancestor; walk the same way so a container's
+  // offset is added to any edge stored inside it (root edges get offset 0).
+  const outEdges: LaidOutEdge[] = [];
+  const walkEdges = (parent: ElkNode, offX: number, offY: number): void => {
+    for (const e of parent.edges ?? []) {
+      const section = e.sections?.[0];
+      const points: { x: number; y: number }[] = [];
+      if (section) {
+        points.push(section.startPoint);
+        for (const bp of section.bendPoints ?? []) points.push(bp);
+        points.push(section.endPoint);
+      }
+      outEdges.push({
+        id: Number(String(e.id).slice(1)),
+        from: Number(String(e.sources[0]).slice(1)),
+        to: Number(String(e.targets[0]).slice(1)),
+        points: points.map((pt) => ({ x: offX + pt.x, y: offY + pt.y })),
+      });
+    }
+    for (const c of parent.children ?? []) {
+      if (groupMeta.has(String(c.id))) walkEdges(c, offX + (c.x ?? 0), offY + (c.y ?? 0));
+    }
+  };
+  walkEdges(res, 0, 0);
 
   return {
     nodes: outNodes,
     edges: outEdges,
+    groups: outGroups,
     width: res.width ?? 0,
     height: res.height ?? 0,
   };

@@ -54,15 +54,16 @@ touch it — swapping to another layout engine means reimplementing that one fil
 
 ## Data model notes
 
-Built against real `pw-dump` output. A `Port` already carries `group` (`port.group`),
-`format` (`format.dsp`) and `channel` (`audio.channel`), so port-format display and
-future **n:1 port groups** are additive — the model does not need restructuring.
-Driver nodes with no ports render as plain boxes; ports whose owning node is missing
-are tolerated.
+Built against real `pw-dump` output. A `Port` carries `group` (`port.group`),
+`format` (`format.dsp`) and `channel` (`audio.channel`); ports are ordered by canonical
+channel (FL, FR, …) so matching channels line up across nodes. A `Node` carries
+`linkGroup` (`node.link-group`); nodes sharing one are collected into `Graph.groups` and
+rendered as a labelled box, with the layout engine ordering the group next to the nodes
+it connects to. Driver nodes with no ports render as plain boxes; ports whose owning node
+is missing are tolerated.
 
 ## Deferred (not yet implemented)
 
 - **Port groups (n:1):** cluster ports by `Port.group` in the renderer / elk.
 - **Upload service:** a small Node.js `POST` endpoint so `pw-dump | curl host` stores a
   dump and returns a shareable URL that the viewer opens via `?url=`.
-```
