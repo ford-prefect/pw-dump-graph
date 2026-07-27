@@ -139,6 +139,32 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
     });
   }
 
+  // A group container has no real edges between its members (the connection is
+  // internal), so elk would stack them vertically. Add invisible node-to-node
+  // ordering edges from the input side (sink-like, input ports only) to the output
+  // side (source-like, output ports only) so the box lays out left→right, matching
+  // a node's own inputs-left / outputs-right convention. Skipped when rendering.
+  const hintEdgeIds = new Set<string>();
+  let hintId = 0;
+  for (const g of graph.groups) {
+    const members = g.nodeIds.map((id) => graph.nodes.get(id)).filter((n): n is Node => !!n);
+    const hasIn = (n: Node) => n.ports.some((p) => p.direction === "in");
+    const hasOut = (n: Node) => n.ports.some((p) => p.direction === "out");
+    const left = members.filter((n) => hasIn(n) && !hasOut(n));
+    const mid = members.filter((n) => hasIn(n) && hasOut(n));
+    const right = members.filter((n) => hasOut(n) && !hasIn(n));
+    const tiers = [left, mid, right].filter((t) => t.length > 0);
+    for (let i = 0; i + 1 < tiers.length; i++) {
+      for (const a of tiers[i]) {
+        for (const b of tiers[i + 1]) {
+          const eid = `h${hintId++}`;
+          hintEdgeIds.add(eid);
+          edges.push({ id: eid, sources: [`n${a.id}`], targets: [`n${b.id}`] });
+        }
+      }
+    }
+  }
+
   const root: ElkNode = {
     id: "root",
     layoutOptions: {
@@ -214,6 +240,7 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
   const outEdges: LaidOutEdge[] = [];
   const walkEdges = (parent: ElkNode, offX: number, offY: number): void => {
     for (const e of parent.edges ?? []) {
+      if (hintEdgeIds.has(String(e.id))) continue; // invisible ordering edge
       const section = e.sections?.[0];
       const points: { x: number; y: number }[] = [];
       if (section) {
