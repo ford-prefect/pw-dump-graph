@@ -138,9 +138,18 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
   // container.
   const consumers = new Set(graph.links.map((l) => l.inNode));
   const isSource = (n: Node) => !consumers.has(n.id) && n.ports.some((p) => p.direction === "out");
+  // Portless nodes (Dummy/Freewheel drivers) carry no signal flow and no edges, so
+  // elk gains nothing from them and its component packer just interleaves them with
+  // the real sources. Keep them out of the layout entirely and stack them in a
+  // corner afterwards (see below).
+  const floaterNodes: Node[] = [];
 
   const children: ElkNode[] = [];
   for (const node of graph.nodes.values()) {
+    if (node.ports.length === 0) {
+      floaterNodes.push(node);
+      continue;
+    }
     const elkNode = makeNode(node);
     const gid = groupOf.get(node.id);
     const container = gid ? containers.get(gid) : undefined;
@@ -295,11 +304,28 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
   };
   walkEdges(res, 0, 0);
 
+  // Place the portless floaters (kept out of elk above) in a tidy column tucked
+  // under the bottom-left of the real graph, so they're visible but out of the flow.
+  if (floaterNodes.length > 0) {
+    const leftX = outNodes.length ? Math.min(...outNodes.map((n) => n.x)) : 0;
+    const bottom = outNodes.length ? Math.max(...outNodes.map((n) => n.y + n.h)) : 0;
+    let y = bottom + 48;
+    for (const node of floaterNodes) {
+      const { w, h } = nodeSize(node);
+      outNodes.push({ id: node.id, x: leftX, y, w, h, headerH: HEADER_H, ports: [] });
+      y += h + 16;
+    }
+  }
+
+  // Recompute bounds over everything (the floaters may extend past elk's box).
+  const right = Math.max(res.width ?? 0, ...outNodes.map((n) => n.x + n.w), ...outGroups.map((g) => g.x + g.w));
+  const bottom = Math.max(res.height ?? 0, ...outNodes.map((n) => n.y + n.h), ...outGroups.map((g) => g.y + g.h));
+
   return {
     nodes: outNodes,
     edges: outEdges,
     groups: outGroups,
-    width: res.width ?? 0,
-    height: res.height ?? 0,
+    width: right,
+    height: bottom,
   };
 };
