@@ -29,8 +29,16 @@ function el<K extends keyof SVGElementTagNameMap>(
 }
 
 function truncate(text: string, maxChars: number): string {
+  if (maxChars < 2) return "";
   return text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
 }
+
+// Glyph-width estimates matching the font sizes in styles.css. Used only to
+// decide where to clip text inside the box the layout gave us.
+const TITLE_CHAR_W = 6.6;
+const PORT_CHAR_W = 5.6;
+const SIDE_PAD = 14; // gap between the node edge and its port label
+const MID_GAP = 44; // clear space kept between the in- and out-label columns
 
 /** Convert a polyline (elk spline control points) into a smooth path string. */
 function smoothPath(points: { x: number; y: number }[]): string {
@@ -60,7 +68,21 @@ function renderNode(node: Node, laid: PositionedGraph["nodes"][number]): SVGGEle
   const g = el("g", { class: "node-group", "data-node-id": node.id });
   const accent = accentFor(node.mediaClass);
 
-  g.appendChild(el("rect", { class: "node-box", x: laid.x, y: laid.y, width: laid.w, height: laid.h, rx: 7 }));
+  const r = 7;
+  g.appendChild(el("rect", { class: "node-box", x: laid.x, y: laid.y, width: laid.w, height: laid.h, rx: r }));
+  // Header band: same rounded top corners as the box, square along the divider.
+  // Port-less nodes (drivers) are all header, so the band would just repaint them.
+  if (laid.ports.length > 0) {
+    g.appendChild(
+      el("path", {
+        class: "node-header",
+        d:
+          `M ${laid.x} ${laid.y + laid.headerH} L ${laid.x} ${laid.y + r} ` +
+          `A ${r} ${r} 0 0 1 ${laid.x + r} ${laid.y} L ${laid.x + laid.w - r} ${laid.y} ` +
+          `A ${r} ${r} 0 0 1 ${laid.x + laid.w} ${laid.y + r} L ${laid.x + laid.w} ${laid.y + laid.headerH} Z`,
+      }),
+    );
+  }
   g.appendChild(
     el("line", {
       class: "node-accent",
@@ -72,14 +94,36 @@ function renderNode(node: Node, laid: PositionedGraph["nodes"][number]): SVGGEle
     }),
   );
 
-  const title = el("text", { class: "node-title", x: laid.x + 12, y: laid.y + (node.mediaClass ? 13 : 18) });
-  title.textContent = truncate(node.name, Math.floor((laid.w - 18) / 6.5));
+  const title = el("text", { class: "node-title", x: laid.x + 13, y: laid.y + (node.mediaClass ? 16 : 21) });
+  title.textContent = truncate(node.name, Math.floor((laid.w - 26) / TITLE_CHAR_W));
   g.appendChild(title);
   if (node.mediaClass) {
-    const sub = el("text", { class: "node-sub", x: laid.x + 12, y: laid.y + 25 });
-    sub.textContent = node.mediaClass;
+    const sub = el("text", { class: "node-sub", x: laid.x + 13, y: laid.y + 30 });
+    sub.textContent = truncate(node.mediaClass, Math.floor((laid.w - 26) / PORT_CHAR_W));
     g.appendChild(sub);
   }
+
+  // Separator marking the reserved header band, so the title reads as its own
+  // row rather than crowding the first port.
+  if (laid.ports.length > 0) {
+    g.appendChild(
+      el("line", {
+        class: "node-divider",
+        x1: laid.x + 1,
+        y1: laid.y + laid.headerH,
+        x2: laid.x + laid.w - 1,
+        y2: laid.y + laid.headerH,
+      }),
+    );
+  }
+
+  // A label column only has to share the box when the other side has ports too.
+  // Halving MID_GAP mirrors how the layout sized the box, so the two columns
+  // keep that gap between them instead of meeting in the middle.
+  const twoSided =
+    laid.ports.some((p) => p.side === "in") && laid.ports.some((p) => p.side === "out");
+  const labelRoom = twoSided ? laid.w / 2 - SIDE_PAD - MID_GAP / 2 : laid.w - SIDE_PAD * 2;
+  const labelChars = Math.floor(labelRoom / PORT_CHAR_W);
 
   for (const lp of laid.ports) {
     const port = node.ports.find((p) => p.id === lp.id);
@@ -96,11 +140,11 @@ function renderNode(node: Node, laid: PositionedGraph["nodes"][number]): SVGGEle
     const inside = lp.side === "in";
     const label = el("text", {
       class: "port-label",
-      x: inside ? lp.x + 8 : lp.x - 8,
+      x: inside ? lp.x + SIDE_PAD : lp.x - SIDE_PAD,
       y: lp.y,
       "text-anchor": inside ? "start" : "end",
     });
-    label.textContent = truncate(port.channel ?? port.name, 18);
+    label.textContent = truncate(port.channel ?? port.name, labelChars);
     g.appendChild(label);
   }
   return g;

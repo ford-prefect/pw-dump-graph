@@ -7,7 +7,9 @@
   --edge: #6f7b8c;
   --edge-hi: #ffcf5c;
   --port: #b9c2cf;
-  --node-stroke: #2c333d;
+  --node-bg: #1e242e;
+  --node-header: #262e3a;
+  --node-stroke: #333c49;
   --dim: 0.18;
 }
 
@@ -80,7 +82,9 @@ html, body {
 #stage.drag-over { outline: 3px dashed #3d7bd1; outline-offset: -8px; }
 
 /* ---- graph elements (scene is transformed via <g id="scene">) ---- */
-.node-box { fill: #232935; stroke: var(--node-stroke); stroke-width: 1; rx: 7; }
+.node-box { fill: var(--node-bg); stroke: var(--node-stroke); stroke-width: 1; rx: 7; }
+.node-header { fill: var(--node-header); pointer-events: none; }
+.node-divider { stroke: var(--node-stroke); stroke-width: 1; pointer-events: none; }
 .node-title {
   fill: var(--text);
   font-weight: 600;
