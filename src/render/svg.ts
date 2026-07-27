@@ -39,6 +39,7 @@ const TITLE_CHAR_W = 6.6;
 const PORT_CHAR_W = 5.6;
 const SIDE_PAD = 14; // gap between the node edge and its port label
 const MID_GAP = 44; // clear space kept between the in- and out-label columns
+const GRID_MINOR = 28; // scene units between fine grid lines
 
 /** Convert a polyline (elk spline control points) into a smooth path string. */
 function smoothPath(points: { x: number; y: number }[]): string {
@@ -150,6 +151,51 @@ function renderNode(node: Node, laid: PositionedGraph["nodes"][number]): SVGGEle
   return g;
 }
 
+/** Backdrop + grid, drawn inside the SVG rather than as a CSS background on the
+ *  element: the rects are unambiguous across browsers, and `updateGrid` can slide
+ *  the pattern so the grid pans and zooms with the scene. */
+function renderBackdrop(svg: SVGSVGElement): void {
+  const defs = el("defs");
+  for (const [id, size, cls] of [
+    ["pw-grid-minor", GRID_MINOR, "grid-minor"],
+    ["pw-grid-major", GRID_MINOR * 5, "grid-major"],
+  ] as const) {
+    const pattern = el("pattern", {
+      id,
+      "data-tile": size, // unzoomed spacing; updateGrid scales from this
+      width: size,
+      height: size,
+      patternUnits: "userSpaceOnUse",
+    });
+    pattern.appendChild(el("path", { class: cls, d: `M ${size} 0 L 0 0 0 ${size}` }));
+    defs.appendChild(pattern);
+  }
+  svg.appendChild(defs);
+
+  svg.appendChild(el("rect", { class: "backdrop", x: 0, y: 0, width: "100%", height: "100%" }));
+  for (const id of ["pw-grid-minor", "pw-grid-major"]) {
+    svg.appendChild(
+      el("rect", { class: "grid", "data-grid": id, width: "100%", height: "100%", fill: `url(#${id})` }),
+    );
+  }
+}
+
+/** Keep the grid patterns aligned with the scene transform. The tile is resized
+ *  rather than scaled via patternTransform, which would scale the stroke too and
+ *  make the lines disappear when zoomed out. */
+export function updateGrid(svg: SVGSVGElement, x: number, y: number, scale: number): void {
+  svg.querySelectorAll<SVGPatternElement>("pattern").forEach((p) => {
+    const tile = Number(p.dataset.tile) * scale;
+    p.setAttribute("width", String(tile));
+    p.setAttribute("height", String(tile));
+    p.setAttribute("patternTransform", `translate(${x} ${y})`);
+    p.firstElementChild?.setAttribute("d", `M ${tile} 0 L 0 0 0 ${tile}`);
+  });
+  // Below ~12px apart the fine grid turns into noise; leave only the coarse one.
+  const minor = svg.querySelector<SVGRectElement>('[data-grid="pw-grid-minor"]');
+  minor?.setAttribute("opacity", GRID_MINOR * scale < 12 ? "0" : "1");
+}
+
 export interface RenderResult {
   sceneEl: SVGGElement;
 }
@@ -157,6 +203,7 @@ export interface RenderResult {
 /** Draw the whole graph into `svg`, returning the transformable scene group. */
 export function renderGraph(svg: SVGSVGElement, graph: Graph, positioned: PositionedGraph): RenderResult {
   svg.replaceChildren();
+  renderBackdrop(svg);
   const scene = el("g", { class: "scene" });
 
   // Edges first (behind nodes).

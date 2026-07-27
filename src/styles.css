@@ -1,7 +1,8 @@
 :root {
-  --bg: #14171c;
-  --grid: #1c2027;
-  --toolbar: #1a1e25;
+  --bg: #0e1116;
+  --grid: #191e27;
+  --grid-strong: #232a36;
+  --toolbar: #171b22;
   --text: #d7dce3;
   --muted: #8a94a3;
   --edge: #6f7b8c;
@@ -54,17 +55,19 @@ html, body {
   overflow: hidden;
 }
 
+/* The grid is drawn as <rect>s inside the SVG (see render/svg.ts) so it pans and
+   zooms with the scene; the element background is just a fallback. */
 #canvas {
   width: 100%;
   height: 100%;
   display: block;
   background-color: var(--bg);
-  background-image:
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 28px 28px;
   cursor: grab;
 }
+.backdrop { fill: var(--bg); }
+.grid { pointer-events: none; }
+.grid-minor { fill: none; stroke: var(--grid); stroke-width: 1; }
+.grid-major { fill: none; stroke: var(--grid-strong); stroke-width: 1; }
 #canvas.panning { cursor: grabbing; }
 
 #dropzone-hint {

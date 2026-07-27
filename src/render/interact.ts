@@ -4,7 +4,7 @@
 
 import type { Graph, Node } from "../model.js";
 import type { PositionedGraph } from "../layout/types.js";
-import { nodeDetailsHTML } from "./svg.js";
+import { nodeDetailsHTML, updateGrid } from "./svg.js";
 
 interface View {
   x: number;
@@ -32,7 +32,7 @@ export function attachInteractions(
 
   // --- view transform: fit the graph, then allow pan/zoom ---
   const view: View = fitView(svg, positioned);
-  applyView(scene, view);
+  applyView(svg, scene, view);
 
   svg.addEventListener("wheel", (ev) => {
     ev.preventDefault();
@@ -45,7 +45,7 @@ export function attachInteractions(
     view.x = mx - (mx - view.x) * (next / view.scale);
     view.y = my - (my - view.y) * (next / view.scale);
     view.scale = next;
-    applyView(scene, view);
+    applyView(svg, scene, view);
   }, { passive: false });
 
   let panning = false;
@@ -64,7 +64,7 @@ export function attachInteractions(
     if (!panning) return;
     view.x = ev.clientX - startX;
     view.y = ev.clientY - startY;
-    applyView(scene, view);
+    applyView(svg, scene, view);
   });
   const endPan = () => {
     panning = false;
@@ -121,8 +121,9 @@ function setInit(m: Map<number, Set<number>>, k: number): Set<number> {
   return s;
 }
 
-function applyView(scene: SVGGElement, v: View): void {
+function applyView(svg: SVGSVGElement, scene: SVGGElement, v: View): void {
   scene.setAttribute("transform", `translate(${v.x} ${v.y}) scale(${v.scale})`);
+  updateGrid(svg, v.x, v.y, v.scale);
 }
 
 function fitView(svg: SVGSVGElement, positioned: PositionedGraph): View {
