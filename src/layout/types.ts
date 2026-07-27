@@ -18,6 +18,10 @@ export interface LaidOutNode {
   y: number;
   w: number;
   h: number;
+  /** Height of the title band, measured from the node's top edge. No port row
+   *  is placed inside it, so the renderer can draw the name/media.class there
+   *  without checking for collisions. */
+  headerH: number;
   ports: LaidOutPort[];
 }
 
