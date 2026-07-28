@@ -47,6 +47,8 @@ html, body {
   font: inherit;
 }
 .file-btn:hover, #toolbar button:hover { background: #2f3742; }
+#toolbar button:disabled { opacity: 0.45; cursor: default; }
+#toolbar button:disabled:hover { background: #262c35; }
 
 #stage {
   position: absolute;

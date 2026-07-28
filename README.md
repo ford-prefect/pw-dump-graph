@@ -31,6 +31,34 @@ npm run build      # static site -> dist/
 npm run typecheck  # tsc --noEmit
 ```
 
+## Sharing (server)
+
+`server/` is a small Rust (axum) service that stores a posted dump **in memory** under a
+short random key and serves the built frontend. No persistence: the store is bounded by
+`PWG_MAX_ENTRIES` (default 500) and `PWG_TTL_SECS` (default 24 h), and everything is lost
+on restart.
+
+```bash
+npm run build                                   # produce dist/ first
+cargo run --release --manifest-path server/Cargo.toml -- --dist "$PWD/dist"
+# → serves API + frontend on 0.0.0.0:8787
+```
+
+Share a dump straight from a PipeWire host — the response includes a ready-to-open link:
+
+```bash
+pw-dump | curl -s --data-binary @- http://<host>:8787/api/dumps
+# → {"key":"kAvgEynPkG","url":"http://<host>:8787/?g=kAvgEynPkG"}
+```
+
+Opening `…/?g=<key>` loads that dump. In the browser, the **Share…** button POSTs the
+currently-loaded dump and copies the `?g=` link to the clipboard.
+
+Endpoints: `POST /api/dumps` (JSON body, `400` if not JSON, `413` over `PWG_BODY_LIMIT`,
+default 8 MiB) → `{key,url}`; `GET /api/dumps/:key` → the JSON (`404` if evicted).
+Config via env: `PWG_ADDR`, `PWG_DIST`, `PWG_MAX_ENTRIES`, `PWG_TTL_SECS`, `PWG_BODY_LIMIT`.
+`npm run dev` proxies `/api` to `localhost:8787`, so the Share button works in dev too.
+
 ## Architecture
 
 Strict one-way layering; a neutral `PositionedGraph` type is the seam between the
@@ -65,5 +93,5 @@ is missing are tolerated.
 ## Deferred (not yet implemented)
 
 - **Port groups (n:1):** cluster ports by `Port.group` in the renderer / elk.
-- **Upload service:** a small Node.js `POST` endpoint so `pw-dump | curl host` stores a
-  dump and returns a shareable URL that the viewer opens via `?url=`.
+- **Server durability/limits:** the share service is in-memory only (no persistence,
+  auth, rate limiting, or TLS — put it behind a reverse proxy if exposed).

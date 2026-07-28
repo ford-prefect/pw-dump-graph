@@ -9,4 +9,11 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
   },
+  server: {
+    // In dev, forward the share API to the locally-running Rust server so the
+    // Share button and ?g= links work against `npm run dev`.
+    proxy: {
+      "/api": "http://localhost:8787",
+    },
+  },
 });

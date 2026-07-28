@@ -17,6 +17,10 @@ const pasteBtn = must<HTMLButtonElement>("#paste-btn");
 const pasteDialog = must<HTMLDialogElement>("#paste-dialog");
 const pasteArea = must<HTMLTextAreaElement>("#paste-area");
 const pasteLoad = must<HTMLButtonElement>("#paste-load");
+const shareBtn = must<HTMLButtonElement>("#share-btn");
+
+// The most recently rendered dump text, so Share can re-POST it to the server.
+let lastDumpText: string | null = null;
 
 function must<T extends Element>(sel: string): T {
   const node = document.querySelector<T>(sel);
@@ -43,6 +47,8 @@ async function renderText(text: string, sourceLabel: string): Promise<void> {
   attachInteractions(svg, sceneEl, graph, positioned, details);
   details.hidden = true;
   stage.classList.add("has-graph");
+  lastDumpText = text;
+  shareBtn.disabled = false;
   setStatus(
     `${graph.nodes.size} nodes · ${graph.ports.size} ports · ${graph.links.length} links — ${sourceLabel}`,
   );
@@ -81,11 +87,43 @@ pasteLoad.addEventListener("click", async () => {
   if (text) await renderText(text, "pasted JSON");
 });
 
-// --- initial load ---
-(async () => {
-  const url = new URLSearchParams(location.search).get("url");
+// --- share: POST the current dump, get back a short ?g= link ---
+shareBtn.addEventListener("click", async () => {
+  if (!lastDumpText) return;
+  shareBtn.disabled = true;
+  setStatus("Sharing…");
   try {
-    if (url) {
+    const res = await fetch("/api/dumps", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: lastDumpText,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { url } = (await res.json()) as { url: string };
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus(`Share link copied: ${url}`);
+    } catch {
+      // Clipboard may be unavailable (non-secure context); show the link to copy.
+      setStatus(`Share link: ${url}`);
+    }
+  } catch (err) {
+    setStatus(`Share failed (${(err as Error).message}). Is the server running?`, true);
+  } finally {
+    shareBtn.disabled = false;
+  }
+});
+
+// --- initial load ---
+// Precedence: ?g=<key> (server-stored dump) → ?url=<href> → bundled sample.
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const key = params.get("g");
+  const url = params.get("url");
+  try {
+    if (key) {
+      await loadFromUrl(`/api/dumps/${encodeURIComponent(key)}`);
+    } else if (url) {
       await loadFromUrl(url);
     } else {
       // bundled sample (served from examples/ via Vite publicDir)
