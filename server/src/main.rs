@@ -162,15 +162,30 @@ async fn serve_embedded(uri: axum::http::Uri) -> Response {
     }
 }
 
-/// Without the `embed` feature the binary serves only the API; the Vite dev server
-/// serves the frontend and proxies `/api` here.
+/// Without the `embed` feature, serve the built frontend from disk (PWG_DIST,
+/// default "dist"), with SPA fallback — so `just serve` serves the app in dev once
+/// `npm run build` has run. Falls back to a hint if the frontend isn't built.
 #[cfg(not(feature = "embed"))]
-async fn serve_embedded() -> Response {
-    (
-        StatusCode::NOT_FOUND,
-        "frontend not embedded — rebuild with `--features embed`, or use the Vite dev server",
-    )
-        .into_response()
+async fn serve_embedded(uri: axum::http::Uri) -> Response {
+    let dist = std::env::var("PWG_DIST").unwrap_or_else(|_| "dist".to_string());
+    let base = std::path::Path::new(&dist);
+    let rel = uri.path().trim_start_matches('/');
+    let rel = if rel.is_empty() { "index.html" } else { rel };
+    if rel.split('/').any(|c| c == "..") {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    if let Ok(bytes) = tokio::fs::read(base.join(rel)).await {
+        let mime = mime_guess::from_path(rel).first_or_octet_stream();
+        return ([(CONTENT_TYPE, mime.as_ref())], bytes).into_response();
+    }
+    match tokio::fs::read(base.join("index.html")).await {
+        Ok(bytes) => ([(CONTENT_TYPE, "text/html")], bytes).into_response(),
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            "frontend not found — run `npm run build` (PWG_DIST), or build with `--features embed`",
+        )
+            .into_response(),
+    }
 }
 
 fn env_parse<T: std::str::FromStr>(key: &str, default: T) -> T {

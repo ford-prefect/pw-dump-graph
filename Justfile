@@ -39,8 +39,10 @@ run: bin
 dev:
     npm run dev
 
-# Run only the share API (debug build) on {{addr}} — pair with `just dev`.
-serve:
+# Run the API and serve the built frontend from disk (debug) on {{addr}}.
+# Depends on `build` so http://localhost:8787 shows a current frontend; pair with
+# `just dev` for hot-reload on :5173 (which proxies /api here).
+serve: build
     PWG_ADDR={{ addr }} cargo run --manifest-path server/Cargo.toml
 
 # Share a dump with a running server; reads a file argument or stdin, prints the URL.

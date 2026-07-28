@@ -47,8 +47,10 @@ npm run build && cargo build --release --features embed --manifest-path server/C
 ./server/target/release/pw-dump-graph-server
 ```
 
-Without `--features embed` the binary serves only the API (the Vite dev server serves the
-frontend and proxies `/api` to it) — that's the `just dev` + `just serve` flow.
+Without `--features embed` the binary instead serves the frontend from `dist/` on disk
+(`PWG_DIST`, default `dist`) — so `just serve` still serves the app at `:8787` once
+`npm run build` has run. Pair it with `just dev` for hot-reload on `:5173` (which proxies
+`/api` to `:8787`).
 
 Share a dump straight from a PipeWire host — pipe it at the root URL and get back a
 ready-to-open link (plain text):

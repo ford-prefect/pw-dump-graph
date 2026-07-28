@@ -50,7 +50,8 @@ stores a JSON body in memory under a random key; `GET /api/dumps/:key` returns i
 store (`src/main.rs`) is bounded by max-count + TTL — **no persistence, no auth**. The
 built frontend is embedded via `rust-embed` behind the **`embed`** cargo feature, so a
 `--features embed` release build is one self-contained binary (`just run`/`just bin`);
-without the feature the binary serves only the API and compiles without `dist/`. It's
+without the feature it serves the frontend from `PWG_DIST` on disk (and compiles without
+`dist/`), which is the `just serve` dev path. It's
 independent of the frontend layering above; the
 frontend reaches it only via `POST /api/dumps` and the `?g=<key>` load path in `main.ts`.
 
