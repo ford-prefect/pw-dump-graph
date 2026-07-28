@@ -26,6 +26,10 @@ build:
 bin: build
     cargo build --release --features embed --manifest-path server/Cargo.toml
 
+# 32-bit variant for ... reasons
+bin32: build
+    cargo build --release --features embed --manifest-path server/Cargo.toml  --target i686-unknown-linux-musl
+
 # Production-like: build the single binary, then run it on {{addr}}.
 run: bin
     PWG_ADDR={{ addr }} ./server/target/release/pw-dump-graph-server
