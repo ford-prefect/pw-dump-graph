@@ -6,19 +6,23 @@ import type { Graph, Node } from "../model.js";
 import type { PositionedGraph } from "../layout/types.js";
 import { nodeDetailsHTML, updateGrid } from "./svg.js";
 
-interface View {
+export interface View {
   x: number;
   y: number;
   scale: number;
 }
 
+/** Wire up pan/zoom/hover/select. Pass `initialView` to keep the current pan/zoom
+ *  across a live re-render (instead of re-fitting); returns a getter for the current
+ *  view so the caller can carry it into the next render. */
 export function attachInteractions(
   svg: SVGSVGElement,
   scene: SVGGElement,
   graph: Graph,
   positioned: PositionedGraph,
   details: HTMLElement,
-): void {
+  initialView?: View,
+): () => View {
   // --- adjacency: port id -> node id, node id -> incident edge ids ---
   const portToNode = new Map<number, number>();
   for (const n of positioned.nodes) for (const p of n.ports) portToNode.set(p.id, n.id);
@@ -36,8 +40,8 @@ export function attachInteractions(
     if (b !== undefined) (nodeEdges.get(b) ?? setInit(nodeEdges, b)).add(e.id);
   }
 
-  // --- view transform: fit the graph, then allow pan/zoom ---
-  const view: View = fitView(svg, positioned);
+  // --- view transform: reuse a carried-over view (live re-render) or fit fresh ---
+  const view: View = initialView ? { ...initialView } : fitView(svg, positioned);
   applyView(svg, scene, view);
 
   svg.addEventListener("wheel", (ev) => {
@@ -123,6 +127,9 @@ export function attachInteractions(
     details.hidden = false;
     details.querySelector(".close")?.addEventListener("click", () => (details.hidden = true));
   }
+
+  // Expose the current view so a live re-render can carry pan/zoom forward.
+  return () => ({ ...view });
 }
 
 function setInit(m: Map<number, Set<number>>, k: number): Set<number> {

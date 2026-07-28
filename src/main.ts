@@ -6,7 +6,7 @@ import "./styles.css";
 import { buildGraph, type Graph } from "./model.js";
 import { elkLayout } from "./layout/elk.js";
 import { renderGraph } from "./render/svg.js";
-import { attachInteractions } from "./render/interact.js";
+import { attachInteractions, type View } from "./render/interact.js";
 
 const svg = must<SVGSVGElement>("#canvas");
 const stage = must<HTMLElement>("#stage");
@@ -37,7 +37,10 @@ function setStatus(msg: string, error = false): void {
   statusEl.style.color = error ? "#e07070" : "";
 }
 
-async function renderText(text: string, sourceLabel: string): Promise<void> {
+// Getter for the current pan/zoom, so a live re-render can keep the viewport steady.
+let viewGetter: (() => View) | undefined;
+
+async function renderText(text: string, sourceLabel: string, keepView = false): Promise<void> {
   let graph: Graph;
   try {
     graph = buildGraph(JSON.parse(text));
@@ -45,10 +48,11 @@ async function renderText(text: string, sourceLabel: string): Promise<void> {
     setStatus(`Failed to parse ${sourceLabel}: ${(err as Error).message}`, true);
     return;
   }
+  const prevView = keepView ? viewGetter?.() : undefined; // carry pan/zoom on live updates
   setStatus("Laying out…");
   const positioned = await elkLayout(graph);
   const { sceneEl } = renderGraph(svg, graph, positioned);
-  attachInteractions(svg, sceneEl, graph, positioned, details);
+  viewGetter = attachInteractions(svg, sceneEl, graph, positioned, details, prevView);
   details.hidden = true;
   stage.classList.add("has-graph");
   lastDumpText = text;
@@ -153,7 +157,7 @@ function startLive(): void {
     liveTimer = setTimeout(async () => {
       try {
         const res = await fetch("/api/graph");
-        if (res.ok) await renderText(await res.text(), "live (pw-dump -m)");
+        if (res.ok) await renderText(await res.text(), "live (pw-dump -m)", true); // keep view
       } catch {
         /* transient; EventSource will keep us posted */
       }
