@@ -71,6 +71,9 @@ function renderNode(
   connected: Set<number>,
 ): SVGGElement {
   const g = el("g", { class: "node-group", "data-node-id": node.id });
+  const nodeTitle = el("title"); // native hover tooltip: node (implementation) format
+  nodeTitle.textContent = node.format ? `${node.name} — ${node.format}` : node.name;
+  g.appendChild(nodeTitle);
   const accent = accentFor(node.mediaClass);
 
   const r = 7;
@@ -143,6 +146,9 @@ function renderNode(
       r: 4,
       "data-port-id": port.id,
     });
+    const portTitle = el("title"); // native hover tooltip: between-nodes port format
+    portTitle.textContent = port.format ? `${port.name} — ${port.format}` : port.name;
+    dot.appendChild(portTitle);
     g.appendChild(dot);
 
     const inside = lp.side === "in";
@@ -279,13 +285,15 @@ export function nodeDetailsHTML(node: Node): string {
 
   const ports = node.ports.map(portRow).join("") || `<tr><td colspan="2">(no ports)</td></tr>`;
 
+  const fmt = node.format ? `<div class="fmt">format · ${esc(node.format)}</div>` : "";
   return `
     <span class="close">✕</span>
     <h3>${esc(node.name)}</h3>
     <div>id ${node.id}</div>
+    ${fmt}
     <div class="section">Properties</div>
     <table>${propRows}</table>
-    <div class="section">Ports (${node.ports.length})</div>
+    <div class="section">Ports (${node.ports.length}) — format</div>
     <table>${ports}</table>
   `;
 }

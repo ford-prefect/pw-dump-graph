@@ -3,7 +3,7 @@
 // This is the stable core; future extensions (port groups, richer formats) are
 // additive fields here and do not ripple outward.
 
-import { parseDump, type RawGroups, type RawObject } from "./parse.js";
+import { parseDump, type RawGroups, type RawInfo, type RawObject } from "./parse.js";
 
 export type Direction = "in" | "out";
 
@@ -13,7 +13,9 @@ export interface Port {
   direction: Direction;
   name: string;
   channel?: string; // audio.channel (FL/FR/MONO/...)
-  format?: string; // format.dsp ("32 bit float mono audio", "8 bit raw midi", ...)
+  // The negotiated port format — what flows between nodes — from the `Format`
+  // param, summarized (e.g. "DSP F32P", "MJPG · 1920×1080 · 30 fps").
+  format?: string;
   group?: string; // port.group — hook for future n:1 port grouping
   monitor?: boolean; // port.monitor
   alias?: string; // port.alias
@@ -24,6 +26,10 @@ export interface Node {
   name: string; // node.description || node.name || "node <id>"
   mediaClass?: string; // media.class (absent for driver nodes)
   linkGroup?: string; // node.link-group — nodes sharing one are internally linked
+  // The format of the wrapped implementation (the stream/device behind the
+  // audio/video adapter), from the node's `Format` param — e.g.
+  // "S32LE · 48 kHz · 2ch". Distinct from a port's between-nodes format.
+  format?: string;
   ports: Port[]; // may be empty (e.g. driver nodes)
   props: Record<string, unknown>;
 }
@@ -59,6 +65,52 @@ function num(v: unknown): number | undefined {
   return typeof v === "number" ? v : undefined;
 }
 
+/** A SPA `Format` pod as it appears in pw-dump JSON (fields vary by media type). */
+interface FormatPod {
+  mediaType?: string;
+  mediaSubtype?: string;
+  format?: string; // audio sample format (S32LE, F32P) or raw-video fourcc (YUY2)
+  rate?: number;
+  channels?: number;
+  size?: { width?: number; height?: number };
+  framerate?: { num?: number; denom?: number };
+}
+
+function khz(rate: number): string {
+  return rate % 1000 === 0 ? `${rate / 1000} kHz` : `${rate} Hz`;
+}
+function fps(fr: { num?: number; denom?: number }): string {
+  const v = (fr.num ?? 0) / (fr.denom || 1);
+  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+}
+
+/** Human summary of a Format pod, covering audio (dsp + raw) and video. */
+function summarizeFormat(f: FormatPod): string | undefined {
+  if (f.mediaType === "audio") {
+    if (f.mediaSubtype === "dsp") return f.format ? `DSP ${f.format}` : "DSP";
+    const parts: string[] = [];
+    if (f.format) parts.push(f.format);
+    if (f.rate) parts.push(khz(f.rate));
+    if (f.channels) parts.push(`${f.channels}ch`);
+    return parts.length ? parts.join(" · ") : "audio";
+  }
+  if (f.mediaType === "video") {
+    const parts: string[] = [];
+    const codec = f.format ?? f.mediaSubtype; // raw video → fourcc; mjpg/h264 → subtype
+    if (codec) parts.push(codec.toUpperCase());
+    if (f.size?.width && f.size?.height) parts.push(`${f.size.width}×${f.size.height}`);
+    if (f.framerate?.num) parts.push(`${fps(f.framerate)} fps`);
+    return parts.length ? parts.join(" · ") : "video";
+  }
+  return [f.mediaType, f.mediaSubtype].filter(Boolean).join("/") || undefined;
+}
+
+/** Summarize the current `Format` param of a node or port, if present. */
+function formatParam(info: RawInfo | undefined): string | undefined {
+  const pod = info?.params?.["Format"]?.[0] as FormatPod | undefined;
+  return pod ? summarizeFormat(pod) : undefined;
+}
+
 function normalizeDirection(raw: RawObject): Direction {
   // Prefer info.direction ("input"/"output"); fall back to props "port.direction" ("in"/"out").
   const d = str(raw.info?.direction) ?? str(raw.info?.props?.["port.direction"]);
@@ -74,6 +126,7 @@ function buildNode(raw: RawObject): Node {
     name,
     mediaClass: str(props["media.class"]),
     linkGroup: str(props["node.link-group"]),
+    format: formatParam(raw.info),
     ports: [],
     props,
   };
@@ -89,7 +142,7 @@ function buildPort(raw: RawObject): Port | undefined {
     direction: normalizeDirection(raw),
     name: str(props["port.name"]) ?? `port ${raw.id}`,
     channel: str(props["audio.channel"]),
-    format: str(props["format.dsp"]),
+    format: formatParam(raw.info),
     group: str(props["port.group"]),
     monitor: props["port.monitor"] === true,
     alias: str(props["port.alias"]),

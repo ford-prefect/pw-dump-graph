@@ -91,13 +91,17 @@ touch it — swapping to another layout engine means reimplementing that one fil
 
 ## Data model notes
 
-Built against real `pw-dump` output. A `Port` carries `group` (`port.group`),
-`format` (`format.dsp`) and `channel` (`audio.channel`); ports are ordered by canonical
-channel (FL, FR, …) so matching channels line up across nodes. A `Node` carries
-`linkGroup` (`node.link-group`); nodes sharing one are collected into `Graph.groups` and
-rendered as a labelled box, with the layout engine ordering the group next to the nodes
-it connects to. Driver nodes with no ports render as plain boxes; ports whose owning node
-is missing are tolerated.
+Built against real `pw-dump` output. A `Port` carries `group` (`port.group`), `channel`
+(`audio.channel`), and a `format` summarized from its `Format` **param** — the format
+flowing between nodes (e.g. `DSP F32P`, `MJPG · 1920×1080 · 30 fps`). A `Node` carries a
+`format` from *its* `Format` param — what the wrapped implementation (stream/device
+behind the audio/video adapter) uses (e.g. `S32LE · 48 kHz · 2ch`). Both are shown on
+hover and in the node details; audio and video are handled (the old `format.dsp` prop was
+audio-only). Ports are ordered by canonical channel (FL, FR, …) so matching channels line
+up across nodes. A `Node` also carries `linkGroup` (`node.link-group`); nodes sharing one
+are collected into `Graph.groups` and rendered as a labelled box, with the layout engine
+ordering the group next to the nodes it connects to. Driver nodes with no ports render as
+plain boxes; ports whose owning node is missing are tolerated.
 
 ## Deferred (not yet implemented)
 

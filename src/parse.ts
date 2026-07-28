@@ -13,6 +13,8 @@ export interface RawInfo {
   direction?: string; // ports: "input" | "output"
   state?: string; // links: "active" | "init" | ...
   props?: Record<string, unknown>;
+  // params keyed by SPA param name ("Format", "EnumFormat", …); each an array of pods.
+  params?: Record<string, unknown[]>;
   // links carry these at info level:
   "output-node-id"?: number;
   "output-port-id"?: number;
