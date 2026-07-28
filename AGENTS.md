@@ -38,22 +38,30 @@ npm run dev        # dev server (renders examples/pw-dump.json by default)
 npm run build      # tsc + vite build → dist/
 npm run typecheck  # tsc --noEmit
 
-# share service (Rust, in server/)
-cargo test  --manifest-path server/Cargo.toml            # store eviction/TTL tests
-just bin                                                 # single binary, frontend embedded
+# Rust workspace (common + server + app)
+cargo test         # workspace tests (share store eviction/TTL, live-merge)
+just bin           # share-server single binary; `just bin-app` for the live viewer
 ```
 
-## Share server (`server/`)
+## Rust workspace (`common` / `server` / `app`)
 
-Rust (axum + tokio) service, kept deliberately small and stateless: `POST /api/dumps`
-stores a JSON body in memory under a random key; `GET /api/dumps/:key` returns it. The
-store (`src/main.rs`) is bounded by max-count + TTL — **no persistence, no auth**. The
-built frontend is embedded via `rust-embed` behind the **`embed`** cargo feature, so a
-`--features embed` release build is one self-contained binary (`just run`/`just bin`);
-without the feature it serves the frontend from `PWG_DIST` on disk (and compiles without
-`dist/`), which is the `just serve` dev path. It's
-independent of the frontend layering above; the
-frontend reaches it only via `POST /api/dumps` and the `?g=<key>` load path in `main.ts`.
+A Cargo workspace at the repo root; the frontend (`src/`, `dist/`) sits alongside it.
+
+- **`common/`** — the frontend-serving `frontend` axum handler: `rust-embed` of `../dist`
+  behind the **`embed`** feature, else `PWG_DIST` disk serving (compiles without `dist/`),
+  with SPA fallback + traversal guard. Both binaries embed via `--features embed` (→ one
+  self-contained binary) and depend on this.
+- **`server/`** (binary `pw-dump-graph-server`) — the **share** service: `POST /api/dumps`
+  stores a JSON body in memory under a random key (max-count + TTL, **no persistence,
+  no auth**); `GET /api/dumps/:key` returns it. `just run`/`serve`.
+- **`app/`** (binary `pw-dump-graph`) — the **live local viewer**: a monitor thread runs
+  `pw-dump -m` (`PWG_DUMP_CMD`), merges batches by object id into an in-memory map, and
+  serves `GET /api/graph` + `GET /api/events` (SSE). `--remote` binds 0.0.0.0 / no browser.
+  `just app`/`app-remote`/`bin-app`.
+
+Both services are independent of the frontend layering above; the frontend reaches them
+only via HTTP (`?g=<key>` / `POST /api/dumps` for share; `/api/graph` + `/api/events` for
+live) — all through the existing `renderText`/`loadFromUrl` pipeline in `main.ts`.
 
 ## Conventions
 

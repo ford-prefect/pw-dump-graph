@@ -31,6 +31,24 @@ npm run build      # static site -> dist/
 npm run typecheck  # tsc --noEmit
 ```
 
+## Live local viewer (`pw-dump-graph`)
+
+`app/` is a standalone Rust binary that runs `pw-dump -m` on the machine, keeps the graph
+in memory (merging the streamed batches by object id), and serves the viewer — refreshing
+the browser live as the graph changes. No storage/sharing.
+
+```bash
+just app          # build frontend, run pw-dump-graph on 127.0.0.1:8787, open a browser
+just app-remote   # bind 0.0.0.0 and DON'T open a browser — run on a device, view from another host
+just bin-app      # single self-contained binary → target/release/pw-dump-graph
+```
+
+It merges each batch by top-level `id` (replace on update, remove on `info`/`props` null),
+serves `GET /api/graph` (current objects) and `GET /api/events` (SSE tick on change,
+debounced). The frontend detects `/api/graph` and switches to live mode, re-fetching on
+each event. Config: `--remote`, `--port`/`PWG_PORT`, `PWG_ADDR`, `PWG_DIST`, and
+`PWG_DUMP_CMD` (default `pw-dump -m`; overridable for a pipeline or a test source).
+
 ## Sharing (server)
 
 `server/` is a small Rust (axum) service that stores a posted dump **in memory** under a

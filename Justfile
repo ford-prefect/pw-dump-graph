@@ -34,6 +34,18 @@ bin32: build
 run: bin
     PWG_ADDR={{ addr }} ./target/release/pw-dump-graph-server
 
+# Local live viewer: spawn `pw-dump -m`, bind 127.0.0.1, open a browser (PWG_DUMP_CMD overrides source).
+app: build
+    cargo run -p pw-dump-graph
+
+# Same, but remote: bind 0.0.0.0 and don't open a browser (view from another host).
+app-remote: build
+    cargo run -p pw-dump-graph -- --remote
+
+# Build the single self-contained live-viewer binary into target/release/pw-dump-graph.
+bin-app: build
+    cargo build --release --features embed -p pw-dump-graph
+
 # Dev: Vite with hot reload on http://localhost:5173 (proxies /api to :8787).
 # Run `just serve` in another terminal so the Share button / ?g= links work.
 dev:
