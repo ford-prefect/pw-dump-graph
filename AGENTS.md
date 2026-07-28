@@ -15,21 +15,21 @@ Dependencies flow one way only, with a neutral `PositionedGraph` as the seam:
 parse → model → layout adapter → PositionedGraph → render
 ```
 
-- **`src/model.ts` and `src/render/*` must never import a layout library** (elkjs or
-  otherwise). Only `src/layout/elk.ts` may import `elkjs`.
-- Swapping layout engines = reimplement `LayoutEngine` in `src/layout/elk.ts` against
-  `src/layout/types.ts`; nothing upstream or downstream should change.
-- The domain model (`src/model.ts`) holds **no** coordinates, colors, or library types.
+- **`frontend/model.ts` and `frontend/render/*` must never import a layout library** (elkjs or
+  otherwise). Only `frontend/layout/elk.ts` may import `elkjs`.
+- Swapping layout engines = reimplement `LayoutEngine` in `frontend/layout/elk.ts` against
+  `frontend/layout/types.ts`; nothing upstream or downstream should change.
+- The domain model (`frontend/model.ts`) holds **no** coordinates, colors, or library types.
   Keep new PipeWire fields additive there.
 
 ## Layers
 
 | Layer | File(s) | May depend on |
 |-------|---------|---------------|
-| parse | `src/parse.ts` | nothing |
-| model | `src/model.ts` | parse |
-| layout | `src/layout/types.ts` (seam), `src/layout/elk.ts` (adapter) | elkjs — adapter only |
-| render | `src/render/svg.ts`, `src/render/interact.ts` | model types + layout seam |
+| parse | `frontend/parse.ts` | nothing |
+| model | `frontend/model.ts` | parse |
+| layout | `frontend/layout/types.ts` (seam), `frontend/layout/elk.ts` (adapter) | elkjs — adapter only |
+| render | `frontend/render/svg.ts`, `frontend/render/interact.ts` | model types + layout seam |
 
 ## Commands
 
@@ -45,7 +45,7 @@ just bin           # share-server single binary; `just bin-app` for the live vie
 
 ## Rust workspace (`common` / `server` / `app`)
 
-A Cargo workspace at the repo root; the frontend (`src/`, `dist/`) sits alongside it.
+A Cargo workspace at the repo root; the frontend (`frontend/`, `dist/`) sits alongside it.
 
 - **`common/`** — the frontend-serving `frontend` axum handler: `rust-embed` of `../dist`
   behind the **`embed`** feature, else `PWG_DIST` disk serving (compiles without `dist/`),

@@ -103,12 +103,12 @@ parse ──▶ model ──▶ layout adapter ──▶ PositionedGraph ──�
 
 | Layer | File(s) | Responsibility | Depends on |
 |-------|---------|----------------|------------|
-| 1 parse | `src/parse.ts` | raw pw-dump JSON → typed records grouped by interface type | — |
-| 2 model | `src/model.ts` | domain `Graph`/`Node`/`Port`/`Link`, no geometry/colors | parse |
-| 3 layout | `src/layout/types.ts` (seam), `src/layout/elk.ts` (adapter) | domain graph → absolute geometry | elkjs (adapter only) |
-| 4 render | `src/render/svg.ts`, `src/render/interact.ts` | draw SVG, pan/zoom/hover/select | model types + seam |
+| 1 parse | `frontend/parse.ts` | raw pw-dump JSON → typed records grouped by interface type | — |
+| 2 model | `frontend/model.ts` | domain `Graph`/`Node`/`Port`/`Link`, no geometry/colors | parse |
+| 3 layout | `frontend/layout/types.ts` (seam), `frontend/layout/elk.ts` (adapter) | domain graph → absolute geometry | elkjs (adapter only) |
+| 4 render | `frontend/render/svg.ts`, `frontend/render/interact.ts` | draw SVG, pan/zoom/hover/select | model types + seam |
 
-**`elkjs` is imported only by `src/layout/elk.ts`.** `model.ts` and `render/*` never
+**`elkjs` is imported only by `frontend/layout/elk.ts`.** `model.ts` and `render/*` never
 touch it — swapping to another layout engine means reimplementing that one file's
 `LayoutEngine` (`(graph) => Promise<PositionedGraph>`).
 
