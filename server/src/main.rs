@@ -98,21 +98,46 @@ fn gen_key() -> String {
     rand::thread_rng().sample_iter(&Alphanumeric).take(10).map(char::from).collect()
 }
 
-async fn create(State(store): State<Shared>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+/// Validate + store a dump, returning its key (None if the body isn't JSON).
+fn store_dump(store: &Shared, body: Bytes) -> Option<String> {
     if serde_json::from_slice::<serde_json::Value>(&body).is_err() {
-        return (StatusCode::BAD_REQUEST, "body is not valid JSON").into_response();
+        return None;
     }
     let key = gen_key();
     store.lock().unwrap().insert(key.clone(), body, Instant::now());
+    Some(key)
+}
 
-    // Build a convenience share URL from the request's Host (and proxy scheme if any).
+/// Build a share URL from the request's Host (honouring a proxy's scheme header).
+fn share_url(headers: &HeaderMap, key: &str) -> String {
     let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
     let scheme = headers
         .get("x-forwarded-proto")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("http");
-    let url = format!("{scheme}://{host}/?g={key}");
-    Json(serde_json::json!({ "key": key, "url": url })).into_response()
+    format!("{scheme}://{host}/?g={key}")
+}
+
+/// JSON response — used by the frontend Share button (`POST /api/dumps`).
+async fn create(State(store): State<Shared>, headers: HeaderMap, body: Bytes) -> Response {
+    match store_dump(&store, body) {
+        Some(key) => {
+            Json(serde_json::json!({ "key": key, "url": share_url(&headers, &key) })).into_response()
+        }
+        None => (StatusCode::BAD_REQUEST, "body is not valid JSON").into_response(),
+    }
+}
+
+/// Plain-text response — for `pw-dump | curl --data-binary @- http://host` (or `-T-`).
+/// Stores the piped dump and prints just the share URL, so it's easy to copy/open.
+async fn create_text(State(store): State<Shared>, headers: HeaderMap, body: Bytes) -> Response {
+    match store_dump(&store, body) {
+        Some(key) => {
+            ([(CONTENT_TYPE, "text/plain; charset=utf-8")], format!("{}\n", share_url(&headers, &key)))
+                .into_response()
+        }
+        None => (StatusCode::BAD_REQUEST, "body is not valid JSON\n").into_response(),
+    }
 }
 
 async fn fetch(State(store): State<Shared>, Path(key): Path<String>) -> impl IntoResponse {
@@ -162,6 +187,9 @@ async fn main() {
     let store: Shared = Arc::new(Mutex::new(Store::new(max, ttl)));
 
     let app = Router::new()
+        // Root: GET serves the frontend; POST/PUT accept a piped dump and reply with
+        // the share URL as plain text — so `pw-dump | curl -T- http://host` just works.
+        .route("/", get(serve_embedded).post(create_text).put(create_text))
         .route("/api/dumps", post(create))
         .route("/api/dumps/{key}", get(fetch))
         .fallback(serve_embedded) // embedded frontend + SPA fallback

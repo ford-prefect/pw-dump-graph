@@ -39,10 +39,10 @@ dev:
 serve:
     PWG_ADDR={{ addr }} cargo run --manifest-path server/Cargo.toml
 
-# Share a dump with a running server; reads a file argument or stdin.
+# Share a dump with a running server; reads a file argument or stdin, prints the URL.
 # pw-dump | just share        or        just share dump.json
 share file="/dev/stdin" host="http://localhost:8787":
-    curl -s --data-binary @{{ file }} {{ host }}/api/dumps
+    curl -sT- {{ host }} < {{ file }}
 
 # Remove build artifacts.
 clean:

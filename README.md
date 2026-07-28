@@ -50,18 +50,21 @@ npm run build && cargo build --release --features embed --manifest-path server/C
 Without `--features embed` the binary serves only the API (the Vite dev server serves the
 frontend and proxies `/api` to it) — that's the `just dev` + `just serve` flow.
 
-Share a dump straight from a PipeWire host — the response includes a ready-to-open link:
+Share a dump straight from a PipeWire host — pipe it at the root URL and get back a
+ready-to-open link (plain text):
 
 ```bash
-pw-dump | curl -s --data-binary @- http://<host>:8787/api/dumps
-# → {"key":"kAvgEynPkG","url":"http://<host>:8787/?g=kAvgEynPkG"}
+pw-dump | curl -sT- http://<host>:8787        # → http://<host>:8787/?g=kAvgEynPkG
 ```
 
-Opening `…/?g=<key>` loads that dump. In the browser, the **Share…** button POSTs the
-currently-loaded dump and copies the `?g=` link to the clipboard.
+(`curl` needs an upload flag to read stdin — `-T-` PUTs it, `--data-binary @-` POSTs it;
+a bare `curl <url>` ignores the pipe and just fetches the page.) Opening `…/?g=<key>`
+loads that dump. In the browser, the **Share…** button does the same and copies the link.
 
-Endpoints: `POST /api/dumps` (JSON body, `400` if not JSON, `413` over `PWG_BODY_LIMIT`,
-default 8 MiB) → `{key,url}`; `GET /api/dumps/:key` → the JSON (`404` if evicted).
+Endpoints: `POST`/`PUT /` (piped dump) → the share URL as text; `POST /api/dumps` → the
+same as JSON `{key,url}` (used by the Share button); `GET /api/dumps/:key` → the stored
+JSON (`404` if evicted). Bodies must be JSON (`400` otherwise) and under `PWG_BODY_LIMIT`
+(`413`, default 8 MiB).
 Config via env: `PWG_ADDR`, `PWG_MAX_ENTRIES`, `PWG_TTL_SECS`, `PWG_BODY_LIMIT`.
 `npm run dev` proxies `/api` to `localhost:8787`, so the Share button works in dev too.
 
