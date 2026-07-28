@@ -21,19 +21,23 @@ test:
 build:
     npm run build
 
-# Production-like: build the frontend + release server, then serve both on {{addr}}.
-run: build
-    cargo build --release --manifest-path server/Cargo.toml
-    PWG_ADDR={{ addr }} ./server/target/release/pw-dump-graph-server --dist "{{ justfile_directory() }}/dist"
+# Build the single self-contained binary (frontend embedded) into
+# server/target/release/pw-dump-graph-server.
+bin: build
+    cargo build --release --features embed --manifest-path server/Cargo.toml
+
+# Production-like: build the single binary, then run it on {{addr}}.
+run: bin
+    PWG_ADDR={{ addr }} ./server/target/release/pw-dump-graph-server
 
 # Dev: Vite with hot reload on http://localhost:5173 (proxies /api to :8787).
 # Run `just serve` in another terminal so the Share button / ?g= links work.
 dev:
     npm run dev
 
-# Run only the share API + static server (debug build) on {{addr}}.
+# Run only the share API (debug build) on {{addr}} — pair with `just dev`.
 serve:
-    PWG_ADDR={{ addr }} cargo run --manifest-path server/Cargo.toml -- --dist "{{ justfile_directory() }}/dist"
+    PWG_ADDR={{ addr }} cargo run --manifest-path server/Cargo.toml
 
 # Share a dump with a running server; reads a file argument or stdin.
 # pw-dump | just share        or        just share dump.json

@@ -15,12 +15,17 @@ use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
     http::{header::CONTENT_TYPE, HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use rand::{distributions::Alphanumeric, Rng};
-use tower_http::services::{ServeDir, ServeFile};
+
+/// The built frontend, baked into the binary (only with the `embed` feature).
+#[cfg(feature = "embed")]
+#[derive(rust_embed::RustEmbed)]
+#[folder = "../dist/"]
+struct Assets;
 
 /// One stored dump plus when it was created (for TTL).
 struct Entry {
@@ -117,28 +122,38 @@ async fn fetch(State(store): State<Shared>, Path(key): Path<String>) -> impl Int
     }
 }
 
+/// Serve the embedded frontend, with SPA fallback to index.html so `/?g=…` works.
+#[cfg(feature = "embed")]
+async fn serve_embedded(uri: axum::http::Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    if let Some(file) = Assets::get(path) {
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        return ([(CONTENT_TYPE, mime.as_ref())], file.data.into_owned()).into_response();
+    }
+    match Assets::get("index.html") {
+        Some(file) => ([(CONTENT_TYPE, "text/html")], file.data.into_owned()).into_response(),
+        None => (StatusCode::NOT_FOUND, "frontend not embedded").into_response(),
+    }
+}
+
+/// Without the `embed` feature the binary serves only the API; the Vite dev server
+/// serves the frontend and proxies `/api` here.
+#[cfg(not(feature = "embed"))]
+async fn serve_embedded() -> Response {
+    (
+        StatusCode::NOT_FOUND,
+        "frontend not embedded — rebuild with `--features embed`, or use the Vite dev server",
+    )
+        .into_response()
+}
+
 fn env_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
     std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
 }
 
-fn dist_dir() -> String {
-    if let Ok(d) = std::env::var("PWG_DIST") {
-        return d;
-    }
-    let mut args = std::env::args();
-    while let Some(a) = args.next() {
-        if a == "--dist" {
-            if let Some(d) = args.next() {
-                return d;
-            }
-        }
-    }
-    "../dist".to_string()
-}
-
 #[tokio::main]
 async fn main() {
-    let dist = dist_dir();
     let max = env_parse("PWG_MAX_ENTRIES", 500usize);
     let ttl = Duration::from_secs(env_parse("PWG_TTL_SECS", 24 * 3600u64));
     let limit = env_parse("PWG_BODY_LIMIT", 8 * 1024 * 1024usize);
@@ -146,18 +161,15 @@ async fn main() {
 
     let store: Shared = Arc::new(Mutex::new(Store::new(max, ttl)));
 
-    // Static frontend with SPA fallback so `/?g=…` serves index.html.
-    let serve = ServeDir::new(&dist).fallback(ServeFile::new(format!("{dist}/index.html")));
-
     let app = Router::new()
         .route("/api/dumps", post(create))
         .route("/api/dumps/{key}", get(fetch))
-        .fallback_service(serve)
+        .fallback(serve_embedded) // embedded frontend + SPA fallback
         .layer(DefaultBodyLimit::max(limit))
         .with_state(store);
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
-    println!("pw-dump-graph-server on http://{addr} (dist={dist}, max={max}, ttl={ttl:?})");
+    println!("pw-dump-graph-server on http://{addr} (max={max}, ttl={ttl:?})");
     axum::serve(listener, app).await.expect("serve");
 }
 

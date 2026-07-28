@@ -34,15 +34,21 @@ npm run typecheck  # tsc --noEmit
 ## Sharing (server)
 
 `server/` is a small Rust (axum) service that stores a posted dump **in memory** under a
-short random key and serves the built frontend. No persistence: the store is bounded by
-`PWG_MAX_ENTRIES` (default 500) and `PWG_TTL_SECS` (default 24 h), and everything is lost
-on restart.
+short random key. No persistence: the store is bounded by `PWG_MAX_ENTRIES` (default 500)
+and `PWG_TTL_SECS` (default 24 h), and everything is lost on restart.
+
+Built with the `embed` feature it bakes the frontend into the binary, so the whole app is
+**one self-contained executable** — no `dist/` to ship alongside:
 
 ```bash
-npm run build                                   # produce dist/ first
-cargo run --release --manifest-path server/Cargo.toml -- --dist "$PWD/dist"
-# → serves API + frontend on 0.0.0.0:8787
+just run          # build frontend, compile with --features embed, serve on :8787
+# equivalently:
+npm run build && cargo build --release --features embed --manifest-path server/Cargo.toml
+./server/target/release/pw-dump-graph-server
 ```
+
+Without `--features embed` the binary serves only the API (the Vite dev server serves the
+frontend and proxies `/api` to it) — that's the `just dev` + `just serve` flow.
 
 Share a dump straight from a PipeWire host — the response includes a ready-to-open link:
 
@@ -56,7 +62,7 @@ currently-loaded dump and copies the `?g=` link to the clipboard.
 
 Endpoints: `POST /api/dumps` (JSON body, `400` if not JSON, `413` over `PWG_BODY_LIMIT`,
 default 8 MiB) → `{key,url}`; `GET /api/dumps/:key` → the JSON (`404` if evicted).
-Config via env: `PWG_ADDR`, `PWG_DIST`, `PWG_MAX_ENTRIES`, `PWG_TTL_SECS`, `PWG_BODY_LIMIT`.
+Config via env: `PWG_ADDR`, `PWG_MAX_ENTRIES`, `PWG_TTL_SECS`, `PWG_BODY_LIMIT`.
 `npm run dev` proxies `/api` to `localhost:8787`, so the Share button works in dev too.
 
 ## Architecture
