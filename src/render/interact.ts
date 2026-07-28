@@ -22,6 +22,12 @@ export function attachInteractions(
   // --- adjacency: port id -> node id, node id -> incident edge ids ---
   const portToNode = new Map<number, number>();
   for (const n of positioned.nodes) for (const p of n.ports) portToNode.set(p.id, n.id);
+  // Port ids carrying a link, for tagging unlinked ports in the details panel.
+  const connectedPorts = new Set<number>();
+  for (const e of positioned.edges) {
+    connectedPorts.add(e.from);
+    connectedPorts.add(e.to);
+  }
   const nodeEdges = new Map<number, Set<number>>();
   for (const e of positioned.edges) {
     const a = portToNode.get(e.from);
@@ -113,7 +119,7 @@ export function attachInteractions(
 
   function showDetails(node: Node | undefined) {
     if (!node) return;
-    details.innerHTML = nodeDetailsHTML(node);
+    details.innerHTML = nodeDetailsHTML(node, connectedPorts);
     details.hidden = false;
     details.querySelector(".close")?.addEventListener("click", () => (details.hidden = true));
   }

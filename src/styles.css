@@ -210,6 +210,7 @@ html, body {
 #details table { width: 100%; border-collapse: collapse; margin-top: 8px; }
 #details td { padding: 2px 4px; vertical-align: top; }
 #details td.k { color: var(--muted); white-space: nowrap; padding-right: 10px; }
+#details .tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: #7f8896; }
 #details .section { margin-top: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 
 dialog {

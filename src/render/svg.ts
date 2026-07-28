@@ -271,11 +271,18 @@ export function renderGraph(svg: SVGSVGElement, graph: Graph, positioned: Positi
   return { sceneEl: scene };
 }
 
-/** Render a node's details into the side panel body. */
-export function nodeDetailsHTML(node: Node): string {
+/** Render a node's details into the side panel body. `connected` is the set of
+ *  port ids carrying a link, used to tag unlinked ports. */
+export function nodeDetailsHTML(node: Node, connected: Set<number>): string {
   const row = (k: string, v: string) => `<tr><td class="k">${esc(k)}</td><td>${esc(v)}</td></tr>`;
-  const portRow = (p: Port) =>
-    `<tr><td class="k">${p.direction === "out" ? "▸" : "◂"} ${esc(p.channel ?? p.name)}</td><td>${esc(p.format ?? "")}</td></tr>`;
+  // Full port name (playback_FL vs monitor_FL — not just the FL/FR channel) plus
+  // monitor / unlinked tags, so the sink's 4 ports read distinctly.
+  const portRow = (p: Port) => {
+    const dir = p.direction === "out" ? "▸" : "◂";
+    const tags = [p.monitor ? "monitor" : "", connected.has(p.id) ? "" : "unlinked"].filter(Boolean).join(", ");
+    const label = `${dir} ${esc(p.name)}` + (tags ? ` <span class="tag">${tags}</span>` : "");
+    return `<tr><td class="k">${label}</td><td>${esc(p.format ?? "")}</td></tr>`;
+  };
 
   const keyProps = ["media.class", "node.name", "node.description", "object.serial", "client.id"];
   const propRows = keyProps
