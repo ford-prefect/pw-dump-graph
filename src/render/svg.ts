@@ -65,7 +65,11 @@ function smoothPath(points: { x: number; y: number }[]): string {
   return d;
 }
 
-function renderNode(node: Node, laid: PositionedGraph["nodes"][number]): SVGGElement {
+function renderNode(
+  node: Node,
+  laid: PositionedGraph["nodes"][number],
+  connected: Set<number>,
+): SVGGElement {
   const g = el("g", { class: "node-group", "data-node-id": node.id });
   const accent = accentFor(node.mediaClass);
 
@@ -129,8 +133,11 @@ function renderNode(node: Node, laid: PositionedGraph["nodes"][number]): SVGGEle
   for (const lp of laid.ports) {
     const port = node.ports.find((p) => p.id === lp.id);
     if (!port) continue;
+    const cls = ["port-dot"];
+    if (port.monitor) cls.push("monitor");
+    if (!connected.has(port.id)) cls.push("inactive"); // no link attached
     const dot = el("circle", {
-      class: port.monitor ? "port-dot monitor" : "port-dot",
+      class: cls.join(" "),
       cx: lp.x,
       cy: lp.y,
       r: 4,
@@ -234,12 +241,19 @@ export function renderGraph(svg: SVGSVGElement, graph: Graph, positioned: Positi
   }
   scene.appendChild(edgeLayer);
 
+  // Ports carrying no link are drawn as "inactive" (dashed).
+  const connected = new Set<number>();
+  for (const l of graph.links) {
+    connected.add(l.outPort);
+    connected.add(l.inPort);
+  }
+
   // Nodes on top.
   const nodeLayer = el("g", { class: "node-layer" });
   for (const laid of positioned.nodes) {
     const node = graph.nodes.get(laid.id);
     if (!node) continue;
-    nodeLayer.appendChild(renderNode(node, laid));
+    nodeLayer.appendChild(renderNode(node, laid, connected));
   }
   scene.appendChild(nodeLayer);
 

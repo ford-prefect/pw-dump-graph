@@ -8,6 +8,7 @@
   --edge: #7c8899;
   --edge-hi: #ffcf5c;
   --port: #b9c2cf;
+  --monitor: #b07be0;
   --node-bg: #1e242e;
   --node-header: #262e3a;
   --node-stroke: #333c49;
@@ -122,7 +123,10 @@ html, body {
 .node-accent { stroke-width: 4; }
 
 .port-dot { fill: var(--port); stroke: #0c0f13; stroke-width: 1; }
-.port-dot.monitor { fill: #b07be0; }
+.port-dot.monitor { fill: var(--monitor); }
+/* unconnected (no link): hollow, dashed outline in the port's own colour */
+.port-dot.inactive { fill: none; stroke: var(--port); stroke-dasharray: 2 2; }
+.port-dot.inactive.monitor { stroke: var(--monitor); }
 .port-label {
   fill: var(--muted);
   font-size: 10px;
@@ -145,6 +149,35 @@ html, body {
 .node-group.hi .node-title { fill: #fff; }
 
 .node-group { cursor: pointer; }
+
+#legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 14px;
+  padding: 7px 12px;
+  background: #1a1e25cc;
+  border: 1px solid #333b46;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  backdrop-filter: blur(3px);
+  user-select: none;
+  pointer-events: none;
+}
+#stage:not(.has-graph) #legend { display: none; }
+#legend .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+#legend .swatch {
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--port);
+  border: 1px solid #0c0f13;
+}
+#legend .swatch.monitor { background: var(--monitor); }
+#legend .swatch.inactive { background: none; border: 1px dashed var(--port); }
 
 #details {
   position: absolute;
