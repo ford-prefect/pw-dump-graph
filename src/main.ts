@@ -129,8 +129,21 @@ shareBtn.addEventListener("click", async () => {
   }
 });
 
+// The local viewer (pw-dump-graph) serves the live graph at /api/graph; the share
+// server and static hosting don't. Try it so those deployments fall through.
+async function tryLoadLive(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/graph");
+    if (!res.ok) return false;
+    await renderText(await res.text(), "live (pw-dump -m)");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // --- initial load ---
-// Precedence: ?g=<key> (server-stored dump) → ?url=<href> → bundled sample.
+// Precedence: ?g=<key> (server-stored dump) → ?url=<href> → live /api/graph → sample.
 (async () => {
   const params = new URLSearchParams(location.search);
   const key = params.get("g");
@@ -141,6 +154,8 @@ shareBtn.addEventListener("click", async () => {
       shareUrl = location.href; // we're already at the share link; Share just re-copies it
     } else if (url) {
       await loadFromUrl(url);
+    } else if (await tryLoadLive()) {
+      // served by the local viewer — graph loaded from /api/graph
     } else {
       // bundled sample (served from examples/ via Vite publicDir)
       await loadFromUrl("/pw-dump.json");

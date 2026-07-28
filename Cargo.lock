@@ -352,6 +352,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pw-dump-graph"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "pw-dump-graph-common",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "pw-dump-graph-common"
 version = "0.1.0"
 dependencies = [

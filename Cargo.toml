@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["common", "server"]
+members = ["common", "server", "app"]
 
 [profile.release]
 strip = true
