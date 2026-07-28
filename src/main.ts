@@ -139,8 +139,11 @@ async function tryLoadLive(): Promise<boolean> {
   try {
     const res = await fetch("/api/graph");
     if (!res.ok) return false;
-    await renderText(await res.text(), "live (pw-dump -m)");
-    startLive();
+    // The app sets x-pwg-live: 1 in monitor mode; one-shot mode omits live updates
+    // (and the server exits after this fetch), so only subscribe when it's live.
+    const live = res.headers.get("x-pwg-live") === "1";
+    await renderText(await res.text(), live ? "live (pw-dump -m)" : "pw-dump");
+    if (live) startLive();
     return true;
   } catch {
     return false;

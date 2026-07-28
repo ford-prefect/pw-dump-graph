@@ -1,11 +1,9 @@
-//! pw-dump-graph — standalone live viewer.
+//! pw-dump-graph — standalone PipeWire graph viewer.
 //!
-//! Runs `pw-dump -m` (overridable via PWG_DUMP_CMD), maintains the current PipeWire
-//! graph in memory by merging the streamed batches, and serves the browser viewer.
-//! `GET /api/graph` returns the current object array; the frontend renders it.
-//!
-//! Default mode binds 127.0.0.1 and opens a browser; `--remote` binds 0.0.0.0 and
-//! doesn't, so the viewer can run on a device and be viewed from another host.
+//! Runs `pw-dump` (overridable via PWG_DUMP_CMD) and serves the browser viewer.
+//! By default it gathers one dump, serves it, and exits once the UI has fetched it.
+//! With `-m` it runs `pw-dump -m` and streams live updates (SSE) instead.
+//! `--remote` binds 0.0.0.0 and doesn't open a browser (run on a device, view remotely).
 
 use std::{
     collections::BTreeMap,
@@ -18,7 +16,6 @@ use std::{
 
 use axum::{
     extract::State,
-    http::header::CONTENT_TYPE,
     response::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse, Response,
@@ -28,13 +25,15 @@ use axum::{
 };
 use pw_dump_graph_common::frontend;
 use serde_json::Value;
-use tokio::sync::watch;
+use tokio::sync::{watch, Notify};
 
-/// Shared router state: the current graph plus a watch of its version for SSE.
+/// Shared router state: the current graph, a watch of its version for SSE, and — in
+/// one-shot (gather) mode — a Notify fired after the first /api/graph GET to shut down.
 #[derive(Clone)]
 struct AppState {
     graph: Shared,
     version_rx: watch::Receiver<u64>,
+    shutdown: Option<Arc<Notify>>,
 }
 
 /// Current graph: pw-dump objects keyed by their top-level `id`, plus a version that
@@ -66,10 +65,10 @@ fn apply_batch(state: &Shared, objects: Vec<Value>) -> u64 {
     s.version
 }
 
-/// Spawn the dump source and feed each parsed batch into `apply_batch`. Runs on a
-/// blocking thread. The command is run through `sh -c` so PWG_DUMP_CMD can be a
-/// pipeline (and tests can substitute a fake generator).
-fn run_monitor(cmd: String, state: Shared, version_tx: watch::Sender<u64>) {
+/// Spawn the dump source and feed each parsed batch into `apply_batch`, calling
+/// `on_batch` with the new version. Blocking. The command runs through `sh -c` so
+/// PWG_DUMP_CMD can be a pipeline (and tests can substitute a fake generator).
+fn run_source(cmd: String, state: Shared, on_batch: impl FnMut(u64)) {
     let mut child = match Command::new("sh").arg("-c").arg(&cmd).stdout(Stdio::piped()).spawn() {
         Ok(child) => child,
         Err(e) => {
@@ -78,11 +77,8 @@ fn run_monitor(cmd: String, state: Shared, version_tx: watch::Sender<u64>) {
         }
     };
     let stdout = child.stdout.take().expect("piped stdout");
-    ingest(stdout, &state, |version| {
-        let _ = version_tx.send(version); // wake SSE subscribers (coalesced by watch)
-    });
+    ingest(stdout, &state, on_batch);
     let _ = child.wait();
-    eprintln!("pw-dump-graph: dump source ended; serving last-known graph");
 }
 
 /// Read a pw-dump stream — successive top-level JSON arrays — and merge each batch,
@@ -103,13 +99,24 @@ fn ingest(reader: impl std::io::Read, state: &Shared, mut on_batch: impl FnMut(u
     }
 }
 
-/// Current graph as a JSON array of objects (what the frontend's parser expects).
+/// Current graph as a JSON array of objects (what the frontend's parser expects). The
+/// `x-pwg-live` header tells the client whether to subscribe for live updates. In
+/// one-shot mode, fetching this triggers shutdown (the UI now has what it needs).
 async fn graph(State(app): State<AppState>) -> Response {
     let body = {
         let s = app.graph.lock().unwrap();
         serde_json::to_vec(&s.objects.values().collect::<Vec<_>>()).unwrap_or_default()
     };
-    ([(CONTENT_TYPE, "application/json")], body).into_response()
+    let live = app.shutdown.is_none();
+    let response = (
+        [("content-type", "application/json"), ("x-pwg-live", if live { "1" } else { "0" })],
+        body,
+    )
+        .into_response();
+    if let Some(notify) = &app.shutdown {
+        notify.notify_one(); // graceful shutdown; this in-flight response still flushes
+    }
+    response
 }
 
 /// SSE stream that ticks whenever the graph changes (debounced). The client re-fetches
@@ -134,16 +141,19 @@ async fn events(State(app): State<AppState>) -> impl IntoResponse {
 
 struct Args {
     remote: bool,
+    monitor: bool,
     addr: String,
 }
 
 fn parse_args() -> Args {
     let mut remote = false;
+    let mut monitor = false;
     let mut port = std::env::var("PWG_PORT").ok().and_then(|v| v.parse::<u16>().ok()).unwrap_or(8787);
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--remote" => remote = true,
+            "-m" | "--monitor" => monitor = true,
             "--port" | "-p" => {
                 if let Some(v) = args.next().and_then(|v| v.parse().ok()) {
                     port = v;
@@ -157,19 +167,35 @@ fn parse_args() -> Args {
         let host = if remote { "0.0.0.0" } else { "127.0.0.1" };
         format!("{host}:{port}")
     });
-    Args { remote, addr }
+    Args { remote, monitor, addr }
 }
 
 #[tokio::main]
 async fn main() {
     let args = parse_args();
-    let cmd = std::env::var("PWG_DUMP_CMD").unwrap_or_else(|_| "pw-dump -m".to_string());
+    // `-m` passes through to pw-dump and streams; otherwise gather one dump.
+    let default_cmd = if args.monitor { "pw-dump -m" } else { "pw-dump" };
+    let cmd = std::env::var("PWG_DUMP_CMD").unwrap_or_else(|_| default_cmd.to_string());
 
     let state: Shared = Arc::new(Mutex::new(GraphState::default()));
     let (version_tx, version_rx) = watch::channel(0u64);
-    {
+    // One-shot mode carries a shutdown signal fired after the UI fetches the graph.
+    let shutdown = if args.monitor { None } else { Some(Arc::new(Notify::new())) };
+
+    if args.monitor {
         let state = state.clone();
-        std::thread::spawn(move || run_monitor(cmd, state, version_tx));
+        std::thread::spawn(move || {
+            run_source(cmd, state, move |v| {
+                let _ = version_tx.send(v); // wake SSE subscribers (coalesced by watch)
+            });
+        });
+    } else {
+        // Gather the whole dump before serving, so the single GET returns it complete.
+        let state = state.clone();
+        tokio::task::spawn_blocking(move || run_source(cmd, state, |_| {}))
+            .await
+            .expect("gather task");
+        drop(version_tx); // no live updates in one-shot mode
     }
 
     let app = Router::new()
@@ -177,18 +203,27 @@ async fn main() {
         .route("/api/events", get(events))
         .route("/", get(frontend))
         .fallback(frontend)
-        .with_state(AppState { graph: state, version_rx });
+        .with_state(AppState { graph: state, version_rx, shutdown: shutdown.clone() });
 
     let listener = tokio::net::TcpListener::bind(&args.addr).await.expect("bind");
     let url = format!("http://{}/", args.addr.replace("0.0.0.0", "127.0.0.1"));
-    println!("pw-dump-graph on {url} ({})", if args.remote { "remote" } else { "local" });
+    let mode = if args.monitor { "monitor" } else { "one-shot" };
+    let net = if args.remote { "remote" } else { "local" };
+    println!("pw-dump-graph on {url} ({net}, {mode})");
 
     if !args.remote {
         // Best-effort: open the viewer locally.
         let _ = Command::new("xdg-open").arg(&url).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
     }
 
-    axum::serve(listener, app).await.expect("serve");
+    match shutdown {
+        // One-shot: shut down after the UI's fetch (graceful — the response still flushes).
+        Some(notify) => axum::serve(listener, app)
+            .with_graceful_shutdown(async move { notify.notified().await })
+            .await
+            .expect("serve"),
+        None => axum::serve(listener, app).await.expect("serve"),
+    }
 }
 
 #[cfg(test)]

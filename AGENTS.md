@@ -54,10 +54,12 @@ A Cargo workspace at the repo root; the frontend (`src/`, `dist/`) sits alongsid
 - **`server/`** (binary `pw-dump-graph-server`) — the **share** service: `POST /api/dumps`
   stores a JSON body in memory under a random key (max-count + TTL, **no persistence,
   no auth**); `GET /api/dumps/:key` returns it. `just run`/`serve`.
-- **`app/`** (binary `pw-dump-graph`) — the **live local viewer**: a monitor thread runs
-  `pw-dump -m` (`PWG_DUMP_CMD`), merges batches by object id into an in-memory map, and
-  serves `GET /api/graph` + `GET /api/events` (SSE). `--remote` binds 0.0.0.0 / no browser.
-  `just app`/`app-remote`/`bin-app`.
+- **`app/`** (binary `pw-dump-graph`) — the **local viewer**. Default is one-shot: gather
+  one `pw-dump`, serve `GET /api/graph`, and exit after the UI fetches it (a `Notify`
+  fires graceful shutdown). With `-m` it runs `pw-dump -m` on a monitor thread, merges
+  batches by object id into an in-memory map, and adds live updates via `GET /api/events`
+  (SSE); `/api/graph` sets `x-pwg-live: 1` so the frontend knows to subscribe. `--remote`
+  binds 0.0.0.0 / no browser. `PWG_DUMP_CMD` overrides the source. `just app`/`app-monitor`/`app-remote`/`bin-app`.
 
 Both services are independent of the frontend layering above; the frontend reaches them
 only via HTTP (`?g=<key>` / `POST /api/dumps` for share; `/api/graph` + `/api/events` for

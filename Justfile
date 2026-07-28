@@ -34,13 +34,17 @@ bin32: build
 run: bin
     PWG_ADDR={{ addr }} ./target/release/pw-dump-graph-server
 
-# Local live viewer: spawn `pw-dump -m`, bind 127.0.0.1, open a browser (PWG_DUMP_CMD overrides source).
+# Local viewer: gather one dump, open a browser, exit after it loads (PWG_DUMP_CMD overrides source).
 app: build
     cargo run -p pw-dump-graph
 
-# Same, but remote: bind 0.0.0.0 and don't open a browser (view from another host).
+# Local live viewer: `-m` streams `pw-dump -m` and updates the page as the graph changes.
+app-monitor: build
+    cargo run -p pw-dump-graph -- -m
+
+# Remote live viewer: bind 0.0.0.0, no browser, stream updates (run on a device, view from another host).
 app-remote: build
-    cargo run -p pw-dump-graph -- --remote
+    cargo run -p pw-dump-graph -- --remote -m
 
 # Build the single self-contained live-viewer binary into target/release/pw-dump-graph.
 bin-app: build
