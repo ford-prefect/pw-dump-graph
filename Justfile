@@ -9,7 +9,7 @@ default:
     @just --list
 
 # Install frontend dependencies.
-install:
+init:
     npm install
 
 # Type-check the frontend and run the workspace's unit tests.
