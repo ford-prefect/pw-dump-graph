@@ -227,11 +227,15 @@ export function renderGraph(svg: SVGSVGElement, graph: Graph, positioned: Positi
   for (const box of positioned.groups) groupLayer.appendChild(renderGroup(box));
   scene.appendChild(groupLayer);
 
-  // Edges next (behind nodes).
+  // Edges next (behind nodes). A link whose state isn't "active" (e.g. init,
+  // paused) is drawn dashed; a missing state is treated as active.
+  const linkState = new Map(graph.links.map((l) => [l.id, l.state]));
   const edgeLayer = el("g", { class: "edge-layer" });
   for (const e of positioned.edges) {
+    const state = linkState.get(e.id);
+    const inactive = state !== undefined && state !== "active";
     const path = el("path", {
-      class: "edge",
+      class: inactive ? "edge inactive" : "edge",
       d: smoothPath(e.points),
       "data-edge-id": e.id,
       "data-from": e.from,

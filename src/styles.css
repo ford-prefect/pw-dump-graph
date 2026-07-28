@@ -141,6 +141,11 @@ html, body {
   stroke-linecap: round;
   opacity: 0.85;
 }
+/* link not in the "active" state (init, paused, …) */
+.edge.inactive {
+  stroke-dasharray: 6 5;
+  opacity: 0.55;
+}
 
 /* Hover highlight (interact.ts). Purely additive — nothing is dimmed, so the
    rest of the graph stays readable while pointing at a node. */
@@ -178,6 +183,14 @@ html, body {
 }
 #legend .swatch.monitor { background: var(--monitor); }
 #legend .swatch.inactive { background: none; border: 1px dashed var(--port); }
+#legend .swatch.link {
+  width: 18px;
+  height: 0;
+  border: none;
+  border-top: 2px dashed var(--edge);
+  border-radius: 0;
+  background: none;
+}
 
 #details {
   position: absolute;
