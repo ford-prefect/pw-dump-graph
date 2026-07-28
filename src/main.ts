@@ -136,10 +136,29 @@ async function tryLoadLive(): Promise<boolean> {
     const res = await fetch("/api/graph");
     if (!res.ok) return false;
     await renderText(await res.text(), "live (pw-dump -m)");
+    startLive();
     return true;
   } catch {
     return false;
   }
+}
+
+// Subscribe to /api/events; on each (debounced) tick re-fetch /api/graph and re-render.
+// EventSource auto-reconnects, so a restarted server just resumes the stream.
+let liveTimer: ReturnType<typeof setTimeout> | undefined;
+function startLive(): void {
+  const es = new EventSource("/api/events");
+  es.onmessage = () => {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/graph");
+        if (res.ok) await renderText(await res.text(), "live (pw-dump -m)");
+      } catch {
+        /* transient; EventSource will keep us posted */
+      }
+    }, 120);
+  };
 }
 
 // --- initial load ---
