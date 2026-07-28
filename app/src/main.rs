@@ -78,23 +78,29 @@ fn run_monitor(cmd: String, state: Shared, version_tx: watch::Sender<u64>) {
         }
     };
     let stdout = child.stdout.take().expect("piped stdout");
-    // serde_json's streaming iterator yields each successive top-level JSON array,
-    // whether pretty-printed or raw — so we don't rely on `pw-dump -R`.
-    let batches = serde_json::Deserializer::from_reader(BufReader::new(stdout)).into_iter::<Vec<Value>>();
+    ingest(stdout, &state, |version| {
+        let _ = version_tx.send(version); // wake SSE subscribers (coalesced by watch)
+    });
+    let _ = child.wait();
+    eprintln!("pw-dump-graph: dump source ended; serving last-known graph");
+}
+
+/// Read a pw-dump stream — successive top-level JSON arrays — and merge each batch,
+/// invoking `on_batch` with the new version. serde_json's streaming iterator yields
+/// each complete array whether pretty-printed or raw, so we don't rely on `pw-dump -R`.
+/// Shared by the live monitor and the tests.
+fn ingest(reader: impl std::io::Read, state: &Shared, mut on_batch: impl FnMut(u64)) {
+    let batches =
+        serde_json::Deserializer::from_reader(BufReader::new(reader)).into_iter::<Vec<Value>>();
     for batch in batches {
         match batch {
-            Ok(objects) => {
-                let version = apply_batch(&state, objects);
-                let _ = version_tx.send(version); // wake SSE subscribers (coalesced by watch)
-            }
+            Ok(objects) => on_batch(apply_batch(state, objects)),
             Err(e) => {
                 eprintln!("pw-dump-graph: error parsing dump stream: {e}");
                 break;
             }
         }
     }
-    let _ = child.wait();
-    eprintln!("pw-dump-graph: dump source ended; serving last-known graph");
 }
 
 /// Current graph as a JSON array of objects (what the frontend's parser expects).
@@ -236,5 +242,43 @@ mod tests {
         apply_batch(&s, vec![json!({"id":1,"info":{}})]);
         apply_batch(&s, vec![json!({"id":2,"info":{}})]);
         assert_eq!(s.lock().unwrap().version, 2);
+    }
+
+    #[test]
+    fn parses_and_merges_a_pretty_stream() {
+        // Exercises the full StreamDeserializer path over multi-line pretty batches
+        // (as `pw-dump -m` emits by default): initial add, update, and both null removals.
+        let stream = r#"
+        [
+          { "id": 1, "type": "Node", "info": { "props": { "node.name": "a" } } },
+          { "id": 2, "type": "Port", "info": {} }
+        ]
+        [ { "id": 1, "info": { "props": { "node.name": "a2" } } } ]
+        [ { "id": 2, "info": null } ]
+        [ { "id": 3, "props": { "x": 1 } } ]
+        [ { "id": 3, "props": null } ]
+        "#;
+        let s = new_state();
+        let mut versions = vec![];
+        ingest(stream.as_bytes(), &s, |v| versions.push(v));
+        let g = s.lock().unwrap();
+        assert_eq!(g.objects.keys().copied().collect::<Vec<_>>(), vec![1], "only id 1 survives");
+        assert_eq!(g.objects[&1]["info"]["props"]["node.name"], json!("a2"), "id 1 replaced");
+        assert_eq!(versions, vec![1, 2, 3, 4, 5], "one version bump per batch");
+    }
+
+    // Opt-in: replay a recorded `pw-dump -m` capture (kept out of the repo). Run with
+    //   PWG_TEST_STREAM=../pw-dump-updates.json cargo test -p pw-dump-graph -- --ignored
+    #[test]
+    #[ignore = "set PWG_TEST_STREAM to a recorded pw-dump -m capture"]
+    fn replays_recorded_stream() {
+        let path = std::env::var("PWG_TEST_STREAM").expect("PWG_TEST_STREAM");
+        let file = std::fs::File::open(&path).expect("open PWG_TEST_STREAM");
+        let s = new_state();
+        ingest(file, &s, |_| {});
+        let g = s.lock().unwrap();
+        assert!(!g.objects.is_empty(), "stream produced a non-empty graph");
+        // No removal-shaped leftovers: every survivor is a real object with a type.
+        assert!(g.objects.values().all(|o| o.get("type").is_some()), "survivors keep their type");
     }
 }
