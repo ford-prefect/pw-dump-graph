@@ -6,18 +6,13 @@ description = "In-memory keyed share service for pw-dump-graph"
 
 [features]
 default = []
-# Bake the built frontend into the binary for one self-contained artifact
-# (requires `npm run build` first). Without it the server still serves the
-# frontend from PWG_DIST on disk when present, so `just serve` works in dev.
-embed = ["dep:rust-embed"]
+# Bake the built frontend into the binary (via the common crate) for one
+# self-contained artifact; without it, common serves the frontend from PWG_DIST.
+embed = ["pw-dump-graph-common/embed"]
 
 [dependencies]
+pw-dump-graph-common = { path = "../common" }
 axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 serde_json = "1"
 rand = "0.8"
-mime_guess = "2"
-rust-embed = { version = "8", optional = true }
-
-[profile.release]
-strip = true

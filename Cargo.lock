@@ -352,13 +352,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "pw-dump-graph-server"
+name = "pw-dump-graph-common"
 version = "0.1.0"
 dependencies = [
  "axum",
  "mime_guess",
- "rand",
  "rust-embed",
+ "tokio",
+]
+
+[[package]]
+name = "pw-dump-graph-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "pw-dump-graph-common",
+ "rand",
  "serde_json",
  "tokio",
 ]

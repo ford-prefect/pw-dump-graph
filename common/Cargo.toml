@@ -1,0 +1,15 @@
+[package]
+name = "pw-dump-graph-common"
+version = "0.1.0"
+edition = "2021"
+description = "Shared frontend-serving for the pw-dump-graph binaries"
+
+[features]
+# Bake the built frontend (../dist) into the binary; without it, serve from PWG_DIST.
+embed = ["dep:rust-embed"]
+
+[dependencies]
+axum = "0.8"
+mime_guess = "2"
+tokio = { version = "1", features = ["fs"] }
+rust-embed = { version = "8", optional = true }

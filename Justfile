@@ -12,27 +12,27 @@ default:
 install:
     npm install
 
-# Type-check the frontend and run the server's unit tests.
+# Type-check the frontend and run the workspace's unit tests.
 test:
     npm run typecheck
-    cargo test --manifest-path server/Cargo.toml
+    cargo test
 
 # Build the frontend into dist/.
 build:
     npm run build
 
-# Build the single self-contained binary (frontend embedded) into
-# server/target/release/pw-dump-graph-server.
+# Build the single self-contained share-server binary (frontend embedded) into
+# target/release/pw-dump-graph-server.
 bin: build
-    cargo build --release --features embed --manifest-path server/Cargo.toml
+    cargo build --release --features embed -p pw-dump-graph-server
 
 # 32-bit variant for ... reasons
 bin32: build
-    cargo build --release --features embed --manifest-path server/Cargo.toml  --target i686-unknown-linux-musl
+    cargo build --release --features embed -p pw-dump-graph-server --target i686-unknown-linux-musl
 
-# Production-like: build the single binary, then run it on {{addr}}.
+# Production-like: build the single share-server binary, then run it on {{addr}}.
 run: bin
-    PWG_ADDR={{ addr }} ./server/target/release/pw-dump-graph-server
+    PWG_ADDR={{ addr }} ./target/release/pw-dump-graph-server
 
 # Dev: Vite with hot reload on http://localhost:5173 (proxies /api to :8787).
 # Run `just serve` in another terminal so the Share button / ?g= links work.
@@ -43,7 +43,7 @@ dev:
 # Depends on `build` so http://localhost:8787 shows a current frontend; pair with
 # `just dev` for hot-reload on :5173 (which proxies /api here).
 serve: build
-    PWG_ADDR={{ addr }} cargo run --manifest-path server/Cargo.toml
+    PWG_ADDR={{ addr }} cargo run -p pw-dump-graph-server
 
 # Share a dump with a running server; reads a file argument or stdin, prints the URL.
 # pw-dump | just share        or        just share dump.json
@@ -52,4 +52,4 @@ share file="/dev/stdin" host="http://localhost:8787":
 
 # Remove build artifacts.
 clean:
-    rm -rf dist server/target
+    rm -rf dist target

@@ -19,13 +19,8 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use pw_dump_graph_common::frontend;
 use rand::{distributions::Alphanumeric, Rng};
-
-/// The built frontend, baked into the binary (only with the `embed` feature).
-#[cfg(feature = "embed")]
-#[derive(rust_embed::RustEmbed)]
-#[folder = "../dist/"]
-struct Assets;
 
 /// One stored dump plus when it was created (for TTL).
 struct Entry {
@@ -147,47 +142,6 @@ async fn fetch(State(store): State<Shared>, Path(key): Path<String>) -> impl Int
     }
 }
 
-/// Serve the embedded frontend, with SPA fallback to index.html so `/?g=…` works.
-#[cfg(feature = "embed")]
-async fn serve_embedded(uri: axum::http::Uri) -> Response {
-    let path = uri.path().trim_start_matches('/');
-    let path = if path.is_empty() { "index.html" } else { path };
-    if let Some(file) = Assets::get(path) {
-        let mime = mime_guess::from_path(path).first_or_octet_stream();
-        return ([(CONTENT_TYPE, mime.as_ref())], file.data.into_owned()).into_response();
-    }
-    match Assets::get("index.html") {
-        Some(file) => ([(CONTENT_TYPE, "text/html")], file.data.into_owned()).into_response(),
-        None => (StatusCode::NOT_FOUND, "frontend not embedded").into_response(),
-    }
-}
-
-/// Without the `embed` feature, serve the built frontend from disk (PWG_DIST,
-/// default "dist"), with SPA fallback — so `just serve` serves the app in dev once
-/// `npm run build` has run. Falls back to a hint if the frontend isn't built.
-#[cfg(not(feature = "embed"))]
-async fn serve_embedded(uri: axum::http::Uri) -> Response {
-    let dist = std::env::var("PWG_DIST").unwrap_or_else(|_| "dist".to_string());
-    let base = std::path::Path::new(&dist);
-    let rel = uri.path().trim_start_matches('/');
-    let rel = if rel.is_empty() { "index.html" } else { rel };
-    if rel.split('/').any(|c| c == "..") {
-        return StatusCode::BAD_REQUEST.into_response();
-    }
-    if let Ok(bytes) = tokio::fs::read(base.join(rel)).await {
-        let mime = mime_guess::from_path(rel).first_or_octet_stream();
-        return ([(CONTENT_TYPE, mime.as_ref())], bytes).into_response();
-    }
-    match tokio::fs::read(base.join("index.html")).await {
-        Ok(bytes) => ([(CONTENT_TYPE, "text/html")], bytes).into_response(),
-        Err(_) => (
-            StatusCode::NOT_FOUND,
-            "frontend not found — run `npm run build` (PWG_DIST), or build with `--features embed`",
-        )
-            .into_response(),
-    }
-}
-
 fn env_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
     std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
 }
@@ -204,10 +158,10 @@ async fn main() {
     let app = Router::new()
         // Root: GET serves the frontend; POST/PUT accept a piped dump and reply with
         // the share URL as plain text — so `pw-dump | curl -T- http://host` just works.
-        .route("/", get(serve_embedded).post(create_text).put(create_text))
+        .route("/", get(frontend).post(create_text).put(create_text))
         .route("/api/dumps", post(create))
         .route("/api/dumps/{key}", get(fetch))
-        .fallback(serve_embedded) // embedded frontend + SPA fallback
+        .fallback(frontend) // embedded/disk frontend + SPA fallback (common crate)
         .layer(DefaultBodyLimit::max(limit))
         .with_state(store);
 
