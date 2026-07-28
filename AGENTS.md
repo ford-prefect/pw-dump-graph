@@ -37,7 +37,19 @@ parse → model → layout adapter → PositionedGraph → render
 npm run dev        # dev server (renders examples/pw-dump.json by default)
 npm run build      # tsc + vite build → dist/
 npm run typecheck  # tsc --noEmit
+
+# share service (Rust, in server/) — serves the API + built dist/
+cargo build --release --manifest-path server/Cargo.toml
+cargo test    --manifest-path server/Cargo.toml       # store eviction/TTL tests
 ```
+
+## Share server (`server/`)
+
+Rust (axum + tokio) service, kept deliberately small and stateless: `POST /api/dumps`
+stores a JSON body in memory under a random key; `GET /api/dumps/:key` returns it; a
+`ServeDir` fallback serves `dist/`. The store (`src/main.rs`) is bounded by max-count +
+TTL — **no persistence, no auth**. It's independent of the frontend layering above; the
+frontend reaches it only via `POST /api/dumps` and the `?g=<key>` load path in `main.ts`.
 
 ## Conventions
 
