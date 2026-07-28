@@ -19,8 +19,12 @@ const pasteArea = must<HTMLTextAreaElement>("#paste-area");
 const pasteLoad = must<HTMLButtonElement>("#paste-load");
 const shareBtn = must<HTMLButtonElement>("#share-btn");
 
-// The most recently rendered dump text, so Share can re-POST it to the server.
+// The most recently rendered dump text, so Share can POST it to the server.
 let lastDumpText: string | null = null;
+// Cached share link for the currently-shown dump: primed when we arrive via ?g=,
+// set after a first Share, and cleared when a different dump loads — so repeated
+// Share clicks reuse the same link instead of minting a new key each time.
+let shareUrl: string | null = null;
 
 function must<T extends Element>(sel: string): T {
   const node = document.querySelector<T>(sel);
@@ -48,6 +52,7 @@ async function renderText(text: string, sourceLabel: string): Promise<void> {
   details.hidden = true;
   stage.classList.add("has-graph");
   lastDumpText = text;
+  shareUrl = null; // a different dump is showing; any cached link no longer applies
   shareBtn.disabled = false;
   setStatus(
     `${graph.nodes.size} nodes · ${graph.ports.size} ports · ${graph.links.length} links — ${sourceLabel}`,
@@ -87,9 +92,23 @@ pasteLoad.addEventListener("click", async () => {
   if (text) await renderText(text, "pasted JSON");
 });
 
-// --- share: POST the current dump, get back a short ?g= link ---
+// --- share: reuse the existing link if we have one, else POST for a new ?g= key ---
+async function copyShare(url: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(url);
+    setStatus(`Share link copied: ${url}`);
+  } catch {
+    // Clipboard may be unavailable (non-secure context); show the link to copy.
+    setStatus(`Share link: ${url}`);
+  }
+}
+
 shareBtn.addEventListener("click", async () => {
   if (!lastDumpText) return;
+  if (shareUrl) {
+    await copyShare(shareUrl); // already shared / arrived via ?g= — don't mint a new key
+    return;
+  }
   shareBtn.disabled = true;
   setStatus("Sharing…");
   try {
@@ -99,14 +118,10 @@ shareBtn.addEventListener("click", async () => {
       body: lastDumpText,
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const { url } = (await res.json()) as { url: string };
-    try {
-      await navigator.clipboard.writeText(url);
-      setStatus(`Share link copied: ${url}`);
-    } catch {
-      // Clipboard may be unavailable (non-secure context); show the link to copy.
-      setStatus(`Share link: ${url}`);
-    }
+    const { key, url } = (await res.json()) as { key: string; url: string };
+    shareUrl = url;
+    history.replaceState(null, "", `?g=${key}`); // reflect the shareable link in the address bar
+    await copyShare(url);
   } catch (err) {
     setStatus(`Share failed (${(err as Error).message}). Is the server running?`, true);
   } finally {
@@ -123,6 +138,7 @@ shareBtn.addEventListener("click", async () => {
   try {
     if (key) {
       await loadFromUrl(`/api/dumps/${encodeURIComponent(key)}`);
+      shareUrl = location.href; // we're already at the share link; Share just re-copies it
     } else if (url) {
       await loadFromUrl(url);
     } else {
