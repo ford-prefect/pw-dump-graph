@@ -9,8 +9,12 @@ import type { LaidOutEdge, LaidOutGroup, LaidOutNode, LaidOutPort, LayoutEngine,
 
 // --- box sizing (kept here so the renderer just honours the geometry) ---
 // The header band is reserved space: port rows start below it, so a node's
-// name/media-class can never collide with the first port's channel label.
-const HEADER_H = 42; // title + media.class band
+// name/media-class/format lines can never collide with the first port's label.
+// It sizes to the number of header lines (title, + media.class, + format), and
+// svg.ts places the text at the matching offsets (HEADER_TOP + i*HEADER_LINE).
+const HEADER_TOP = 8; // padding above the first header line
+const HEADER_LINE = 14; // per-line height in the header
+const HEADER_BOTTOM = 8; // padding below the last header line
 const PORT_ROW_H = 20; // vertical spacing between port stubs
 const PORT_PAD_Y = 9; // padding above/below the port block
 const TITLE_CHAR_W = 6.6; // rough glyph width, 12px semibold
@@ -46,21 +50,32 @@ function portLabel(p: Port): string {
   return p.channel ?? p.name;
 }
 
-function nodeSize(node: Node): { w: number; h: number } {
+/** Header text lines: node name, then media.class and format when present. */
+function headerLines(node: Node): number {
+  return 1 + (node.mediaClass ? 1 : 0) + (node.format ? 1 : 0);
+}
+function headerHeight(node: Node): number {
+  return HEADER_TOP + headerLines(node) * HEADER_LINE + HEADER_BOTTOM;
+}
+
+function nodeSize(node: Node): { w: number; h: number; headerH: number } {
   const ins = node.ports.filter((p) => p.direction === "in");
   const outs = node.ports.filter((p) => p.direction === "out");
   const rows = Math.max(ins.length, outs.length);
+  const headerH = headerHeight(node);
   // Port-less nodes (drivers) collapse to just the header band.
-  const h = HEADER_H + (rows > 0 ? rows * PORT_ROW_H + PORT_PAD_Y * 2 : 0);
+  const h = headerH + (rows > 0 ? rows * PORT_ROW_H + PORT_PAD_Y * 2 : 0);
 
   const titleW = node.name.length * TITLE_CHAR_W + 26;
+  // Header sub-lines (media.class, format) must fit too, else they'd clip.
+  const subW = Math.max(node.mediaClass?.length ?? 0, node.format?.length ?? 0) * PORT_CHAR_W + 26;
   const widest = (ps: Port[]) =>
     ps.reduce((m, p) => Math.max(m, Math.min(portLabel(p).length, PORT_LABEL_CAP)), 0);
   // Both label columns plus the padding that keeps them apart.
   const portsW =
     (widest(ins) + widest(outs)) * PORT_CHAR_W + SIDE_PAD * 2 + (ins.length && outs.length ? MID_GAP : 0);
-  const w = Math.max(MIN_W, Math.min(MAX_W, Math.max(titleW, portsW)));
-  return { w, h };
+  const w = Math.max(MIN_W, Math.min(MAX_W, Math.max(titleW, subW, portsW)));
+  return { w, h, headerH };
 }
 
 function elkPortSide(dir: Direction): "WEST" | "EAST" {
@@ -68,8 +83,8 @@ function elkPortSide(dir: Direction): "WEST" | "EAST" {
 }
 
 /** Row centre of the i-th port on a side, relative to the node's top edge. */
-function portRowY(i: number): number {
-  return HEADER_H + PORT_PAD_Y + i * PORT_ROW_H + PORT_ROW_H / 2;
+function portRowY(headerH: number, i: number): number {
+  return headerH + PORT_PAD_Y + i * PORT_ROW_H + PORT_ROW_H / 2;
 }
 
 const elk = new ELK();
@@ -80,11 +95,13 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
   // zero-size points at exactly this spot, so elk's edge endpoints land on the
   // dot the renderer draws; keeping the map avoids trusting elk's echoed coords.
   const centres = new Map<number, { dx: number; dy: number }>();
+  const headers = new Map<number, number>(); // node id -> header band height
 
   // Build one elk box per node. Ports sit at fixed positions on our own rows
   // (see portRowY) so the stubs clear the header band and match the renderer.
   const makeNode = (node: Node): ElkNode => {
-    const { w, h } = nodeSize(node);
+    const { w, h, headerH } = nodeSize(node);
+    headers.set(node.id, headerH);
     const rowIndex = { in: 0, out: 0 };
     return {
       id: `n${node.id}`,
@@ -96,7 +113,7 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
       ports: node.ports.map((p) => {
         sides.set(p.id, p.direction);
         const i = rowIndex[p.direction]++;
-        centres.set(p.id, { dx: p.direction === "in" ? 0 : w, dy: portRowY(i) });
+        centres.set(p.id, { dx: p.direction === "in" ? 0 : w, dy: portRowY(headerH, i) });
         return {
           id: `p${p.id}`,
           // Zero-size: a port box would make elk anchor edges at its outer face
@@ -104,7 +121,7 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
           width: 0,
           height: 0,
           x: p.direction === "in" ? 0 : w,
-          y: portRowY(i),
+          y: portRowY(headerH, i),
           layoutOptions: { "elk.port.side": elkPortSide(p.direction) },
         };
       }),
@@ -265,13 +282,15 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
           side: sides.get(id) ?? "in",
         };
       });
+      const id = Number(String(c.id).slice(1));
+      const headerH = headers.get(id) ?? HEADER_TOP + HEADER_LINE + HEADER_BOTTOM;
       outNodes.push({
-        id: Number(String(c.id).slice(1)),
+        id,
         x: ax,
         y: ay,
         w: c.width ?? MIN_W,
-        h: c.height ?? HEADER_H,
-        headerH: HEADER_H,
+        h: c.height ?? headerH,
+        headerH,
         ports,
       });
     }
@@ -311,8 +330,8 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
     const bottom = outNodes.length ? Math.max(...outNodes.map((n) => n.y + n.h)) : 0;
     let y = bottom + 48;
     for (const node of floaterNodes) {
-      const { w, h } = nodeSize(node);
-      outNodes.push({ id: node.id, x: leftX, y, w, h, headerH: HEADER_H, ports: [] });
+      const { w, h, headerH } = nodeSize(node);
+      outNodes.push({ id: node.id, x: leftX, y, w, h, headerH, ports: [] });
       y += h + 16;
     }
   }

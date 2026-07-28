@@ -120,6 +120,12 @@ html, body {
   dominant-baseline: middle;
   pointer-events: none;
 }
+.node-fmt {
+  fill: #79838f;
+  font-size: 10px;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
 .node-accent { stroke-width: 4; }
 
 .port-dot { fill: var(--port); stroke: #0c0f13; stroke-width: 1; }

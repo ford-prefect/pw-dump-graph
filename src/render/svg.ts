@@ -40,6 +40,10 @@ const PORT_CHAR_W = 5.6;
 const SIDE_PAD = 14; // gap between the node edge and its port label
 const MID_GAP = 44; // clear space kept between the in- and out-label columns
 const GRID_MINOR = 28; // scene units between fine grid lines
+// Header text line metrics — must match HEADER_TOP/HEADER_LINE in layout/elk.ts,
+// which sizes the header band to the number of lines drawn here.
+const HEADER_TOP = 8;
+const HEADER_LINE = 14;
 
 /** Convert a polyline (elk spline control points) into a smooth path string. */
 function smoothPath(points: { x: number; y: number }[]): string {
@@ -102,13 +106,24 @@ function renderNode(
     }),
   );
 
-  const title = el("text", { class: "node-title", x: laid.x + 13, y: laid.y + (node.mediaClass ? 16 : 21) });
+  // Header lines: name, then media.class and format when present. Positions match
+  // the band height the layout reserved (HEADER_TOP + line * HEADER_LINE).
+  let line = 0;
+  const lineY = (i: number) => laid.y + HEADER_TOP + i * HEADER_LINE + HEADER_LINE / 2;
+  const subChars = Math.floor((laid.w - 26) / PORT_CHAR_W);
+
+  const title = el("text", { class: "node-title", x: laid.x + 13, y: lineY(line++) });
   title.textContent = truncate(node.name, Math.floor((laid.w - 26) / TITLE_CHAR_W));
   g.appendChild(title);
   if (node.mediaClass) {
-    const sub = el("text", { class: "node-sub", x: laid.x + 13, y: laid.y + 30 });
-    sub.textContent = truncate(node.mediaClass, Math.floor((laid.w - 26) / PORT_CHAR_W));
+    const sub = el("text", { class: "node-sub", x: laid.x + 13, y: lineY(line++) });
+    sub.textContent = truncate(node.mediaClass, subChars);
     g.appendChild(sub);
+  }
+  if (node.format) {
+    const fmt = el("text", { class: "node-fmt", x: laid.x + 13, y: lineY(line++) });
+    fmt.textContent = truncate(node.format, subChars);
+    g.appendChild(fmt);
   }
 
   // Separator marking the reserved header band, so the title reads as its own
