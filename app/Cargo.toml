@@ -1,12 +1,21 @@
 [package]
 name = "pw-dump-graph"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 description = "Standalone live PipeWire graph viewer (runs pw-dump -m and serves the viewer)"
 
 [[bin]]
 name = "pw-dump-graph"
 path = "src/main.rs"
+
+# Released by `dist`. Build with the frontend embedded so the binary is
+# self-contained (the release CI runs `npm run build` first — see
+# .github/workflows/build-setup.yml).
+[package.metadata.dist]
+features = ["embed"]
 
 [features]
 default = []
