@@ -40,7 +40,12 @@ struct Store {
 
 impl Store {
     fn new(max: usize, ttl: Duration) -> Self {
-        Store { map: HashMap::new(), order: VecDeque::new(), max, ttl }
+        Store {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            max,
+            ttl,
+        }
     }
 
     fn evict(&mut self, now: Instant) {
@@ -68,7 +73,13 @@ impl Store {
     }
 
     fn insert(&mut self, key: String, bytes: Bytes, now: Instant) {
-        self.map.insert(key.clone(), Entry { bytes, created: now });
+        self.map.insert(
+            key.clone(),
+            Entry {
+                bytes,
+                created: now,
+            },
+        );
         self.order.push_back(key);
         self.evict(now);
     }
@@ -90,7 +101,11 @@ type Shared = Arc<Mutex<Store>>;
 fn gen_key() -> String {
     // Alphanumeric is url-safe (A-Za-z0-9); 10 chars ≈ 60 bits, unguessable enough for
     // an unlisted share link with no durable data behind it.
-    rand::thread_rng().sample_iter(&Alphanumeric).take(10).map(char::from).collect()
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(10)
+        .map(char::from)
+        .collect()
 }
 
 /// Validate + store a dump, returning its key (None if the body isn't JSON).
@@ -99,13 +114,19 @@ fn store_dump(store: &Shared, body: Bytes) -> Option<String> {
         return None;
     }
     let key = gen_key();
-    store.lock().unwrap().insert(key.clone(), body, Instant::now());
+    store
+        .lock()
+        .unwrap()
+        .insert(key.clone(), body, Instant::now());
     Some(key)
 }
 
 /// Build a share URL from the request's Host (honouring a proxy's scheme header).
 fn share_url(headers: &HeaderMap, key: &str) -> String {
-    let host = headers.get("host").and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+    let host = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost");
     let scheme = headers
         .get("x-forwarded-proto")
         .and_then(|v| v.to_str().ok())
@@ -116,9 +137,8 @@ fn share_url(headers: &HeaderMap, key: &str) -> String {
 /// JSON response — used by the frontend Share button (`POST /api/dumps`).
 async fn create(State(store): State<Shared>, headers: HeaderMap, body: Bytes) -> Response {
     match store_dump(&store, body) {
-        Some(key) => {
-            Json(serde_json::json!({ "key": key, "url": share_url(&headers, &key) })).into_response()
-        }
+        Some(key) => Json(serde_json::json!({ "key": key, "url": share_url(&headers, &key) }))
+            .into_response(),
         None => (StatusCode::BAD_REQUEST, "body is not valid JSON").into_response(),
     }
 }
@@ -127,10 +147,11 @@ async fn create(State(store): State<Shared>, headers: HeaderMap, body: Bytes) ->
 /// Stores the piped dump and prints just the share URL, so it's easy to copy/open.
 async fn create_text(State(store): State<Shared>, headers: HeaderMap, body: Bytes) -> Response {
     match store_dump(&store, body) {
-        Some(key) => {
-            ([(CONTENT_TYPE, "text/plain; charset=utf-8")], format!("{}\n", share_url(&headers, &key)))
-                .into_response()
-        }
+        Some(key) => (
+            [(CONTENT_TYPE, "text/plain; charset=utf-8")],
+            format!("{}\n", share_url(&headers, &key)),
+        )
+            .into_response(),
         None => (StatusCode::BAD_REQUEST, "body is not valid JSON\n").into_response(),
     }
 }
@@ -143,7 +164,10 @@ async fn fetch(State(store): State<Shared>, Path(key): Path<String>) -> impl Int
 }
 
 fn env_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 #[tokio::main]

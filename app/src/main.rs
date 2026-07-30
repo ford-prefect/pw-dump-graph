@@ -52,7 +52,9 @@ type Shared = Arc<Mutex<GraphState>>;
 fn apply_batch(state: &Shared, objects: Vec<Value>) -> u64 {
     let mut s = state.lock().unwrap();
     for obj in objects {
-        let Some(id) = obj.get("id").and_then(Value::as_i64) else { continue };
+        let Some(id) = obj.get("id").and_then(Value::as_i64) else {
+            continue;
+        };
         let removed = obj.get("info").is_some_and(Value::is_null)
             || obj.get("props").is_some_and(Value::is_null);
         if removed {
@@ -69,7 +71,12 @@ fn apply_batch(state: &Shared, objects: Vec<Value>) -> u64 {
 /// `on_batch` with the new version. Blocking. The command runs through `sh -c` so
 /// PWG_DUMP_CMD can be a pipeline (and tests can substitute a fake generator).
 fn run_source(cmd: String, state: Shared, on_batch: impl FnMut(u64)) {
-    let mut child = match Command::new("sh").arg("-c").arg(&cmd).stdout(Stdio::piped()).spawn() {
+    let mut child = match Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .stdout(Stdio::piped())
+        .spawn()
+    {
         Ok(child) => child,
         Err(e) => {
             eprintln!("pw-dump-graph: failed to start `{cmd}`: {e}");
@@ -109,7 +116,10 @@ async fn graph(State(app): State<AppState>) -> Response {
     };
     let live = app.shutdown.is_none();
     let response = (
-        [("content-type", "application/json"), ("x-pwg-live", if live { "1" } else { "0" })],
+        [
+            ("content-type", "application/json"),
+            ("x-pwg-live", if live { "1" } else { "0" }),
+        ],
         body,
     )
         .into_response();
@@ -148,7 +158,10 @@ struct Args {
 fn parse_args() -> Args {
     let mut remote = false;
     let mut monitor = false;
-    let mut port = std::env::var("PWG_PORT").ok().and_then(|v| v.parse::<u16>().ok()).unwrap_or(8787);
+    let mut port = std::env::var("PWG_PORT")
+        .ok()
+        .and_then(|v| v.parse::<u16>().ok())
+        .unwrap_or(8787);
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -167,20 +180,32 @@ fn parse_args() -> Args {
         let host = if remote { "0.0.0.0" } else { "127.0.0.1" };
         format!("{host}:{port}")
     });
-    Args { remote, monitor, addr }
+    Args {
+        remote,
+        monitor,
+        addr,
+    }
 }
 
 #[tokio::main]
 async fn main() {
     let args = parse_args();
     // `-m` passes through to pw-dump and streams; otherwise gather one dump.
-    let default_cmd = if args.monitor { "pw-dump -m" } else { "pw-dump" };
+    let default_cmd = if args.monitor {
+        "pw-dump -m"
+    } else {
+        "pw-dump"
+    };
     let cmd = std::env::var("PWG_DUMP_CMD").unwrap_or_else(|_| default_cmd.to_string());
 
     let state: Shared = Arc::new(Mutex::new(GraphState::default()));
     let (version_tx, version_rx) = watch::channel(0u64);
     // One-shot mode carries a shutdown signal fired after the UI fetches the graph.
-    let shutdown = if args.monitor { None } else { Some(Arc::new(Notify::new())) };
+    let shutdown = if args.monitor {
+        None
+    } else {
+        Some(Arc::new(Notify::new()))
+    };
 
     if args.monitor {
         let state = state.clone();
@@ -203,9 +228,15 @@ async fn main() {
         .route("/api/events", get(events))
         .route("/", get(frontend))
         .fallback(frontend)
-        .with_state(AppState { graph: state, version_rx, shutdown: shutdown.clone() });
+        .with_state(AppState {
+            graph: state,
+            version_rx,
+            shutdown: shutdown.clone(),
+        });
 
-    let listener = tokio::net::TcpListener::bind(&args.addr).await.expect("bind");
+    let listener = tokio::net::TcpListener::bind(&args.addr)
+        .await
+        .expect("bind");
     let url = format!("http://{}/", args.addr.replace("0.0.0.0", "127.0.0.1"));
     let mode = if args.monitor { "monitor" } else { "one-shot" };
     let net = if args.remote { "remote" } else { "local" };
@@ -213,7 +244,11 @@ async fn main() {
 
     if !args.remote {
         // Best-effort: open the viewer locally.
-        let _ = Command::new("xdg-open").arg(&url).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+        let _ = Command::new("xdg-open")
+            .arg(&url)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
     }
 
     match shutdown {
@@ -241,7 +276,13 @@ mod tests {
     #[test]
     fn initial_batch_adds_all() {
         let s = new_state();
-        apply_batch(&s, vec![json!({"id":1,"type":"Node","info":{}}), json!({"id":2,"type":"Port","info":{}})]);
+        apply_batch(
+            &s,
+            vec![
+                json!({"id":1,"type":"Node","info":{}}),
+                json!({"id":2,"type":"Port","info":{}}),
+            ],
+        );
         assert_eq!(ids(&s), vec![1, 2]);
     }
 
@@ -258,7 +299,10 @@ mod tests {
     #[test]
     fn null_info_removes() {
         let s = new_state();
-        apply_batch(&s, vec![json!({"id":1,"info":{}}), json!({"id":2,"info":{}})]);
+        apply_batch(
+            &s,
+            vec![json!({"id":1,"info":{}}), json!({"id":2,"info":{}})],
+        );
         apply_batch(&s, vec![json!({"id":1,"info":null})]);
         assert_eq!(ids(&s), vec![2]);
     }
@@ -297,8 +341,16 @@ mod tests {
         let mut versions = vec![];
         ingest(stream.as_bytes(), &s, |v| versions.push(v));
         let g = s.lock().unwrap();
-        assert_eq!(g.objects.keys().copied().collect::<Vec<_>>(), vec![1], "only id 1 survives");
-        assert_eq!(g.objects[&1]["info"]["props"]["node.name"], json!("a2"), "id 1 replaced");
+        assert_eq!(
+            g.objects.keys().copied().collect::<Vec<_>>(),
+            vec![1],
+            "only id 1 survives"
+        );
+        assert_eq!(
+            g.objects[&1]["info"]["props"]["node.name"],
+            json!("a2"),
+            "id 1 replaced"
+        );
         assert_eq!(versions, vec![1, 2, 3, 4, 5], "one version bump per batch");
     }
 
@@ -314,6 +366,9 @@ mod tests {
         let g = s.lock().unwrap();
         assert!(!g.objects.is_empty(), "stream produced a non-empty graph");
         // No removal-shaped leftovers: every survivor is a real object with a type.
-        assert!(g.objects.values().all(|o| o.get("type").is_some()), "survivors keep their type");
+        assert!(
+            g.objects.values().all(|o| o.get("type").is_some()),
+            "survivors keep their type"
+        );
     }
 }
