@@ -65,6 +65,21 @@ Both services are independent of the frontend layering above; the frontend reach
 only via HTTP (`?g=<key>` / `POST /api/dumps` for share; `/api/graph` + `/api/events` for
 live) — all through the existing `renderText`/`loadFromUrl` pipeline in `main.ts`.
 
+## Releases (dist / cargo-dist)
+
+Tag-triggered binary releases via [`dist`](https://opensource.axo.dev/cargo-dist/), configured
+in `[workspace.metadata.dist]` (root `Cargo.toml`) + `app/[package.metadata.dist]`.
+
+- **`.github/workflows/release.yml` is generated — do not hand-edit it.** Change
+  `[workspace.metadata.dist]` (or the crate metadata) and run `dist generate` to regenerate.
+- **`.github/workflows/build-setup.yml` is load-bearing:** it's spliced into the build job (via
+  `github-build-setup`) to run `npm ci && npm run build` *before* the Rust compile, because the
+  release builds `app` with `--features embed` and rust-embed reads `dist/` at compile time.
+  If you change how the frontend builds or where it outputs, update this file.
+- Scope: **app-only** (`server` has `dist = false`), targets `x86_64`/`aarch64`
+  `-unknown-linux-gnu`, no installer, `.tar.xz` + SHA256 checksums. Native runners, no container.
+- Cutting a release: bump the workspace `version`, commit, `git tag vX.Y.Z && git push --tags`.
+
 ## Conventions
 
 - TypeScript, `strict` mode; keep `tsc` clean (no new errors/warnings).

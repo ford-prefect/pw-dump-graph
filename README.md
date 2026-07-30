@@ -91,6 +91,23 @@ JSON (`404` if evicted). Bodies must be JSON (`400` otherwise) and under `PWG_BO
 Config via env: `PWG_ADDR`, `PWG_MAX_ENTRIES`, `PWG_TTL_SECS`, `PWG_BODY_LIMIT`.
 `npm run dev` proxies `/api` to `localhost:8787`, so the Share button works in dev too.
 
+## Releases
+
+Prebuilt `pw-dump-graph` binaries for `x86_64` and `aarch64` Linux (glibc) are cut by
+[`dist`](https://opensource.axo.dev/cargo-dist/) on a version tag:
+
+```bash
+# bump the workspace version in Cargo.toml, commit, then:
+git tag v0.1.0 && git push --tags     # → .github/workflows/release.yml builds + publishes a GitHub Release
+```
+
+Each target builds on a native runner (`ubuntu-22.04` / `ubuntu-22.04-arm`); the release
+workflow runs `npm ci && npm run build` first (`.github/workflows/build-setup.yml`) so the
+`app` crate can be compiled with `--features embed` — the published binary is
+**self-contained** (frontend baked in). Only `app` is shipped; artifacts are `.tar.xz` archives
+with per-file `.sha256` plus an aggregate `sha256.sum`. Configure via `[workspace.metadata.dist]`
+in `Cargo.toml`; regenerate the workflow with `dist generate` after changing it.
+
 ## Architecture
 
 Strict one-way layering; a neutral `PositionedGraph` type is the seam between the

@@ -2,5 +2,33 @@
 resolver = "2"
 members = ["common", "server", "app"]
 
+# Shared metadata inherited by the member crates (repository/license are
+# required by `dist` for the released package).
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/ford-prefect/pw-dump-graph"
+authors = ["Arun Raghavan <arun@arunraghavan.net>"]
+
+# Config for 'dist'
+[workspace.metadata.dist]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
+# The installers to generate for each app
+installers = []
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# Extra CI steps to run before building (builds the frontend into dist/ so the
+# app can be compiled with the embed feature).
+github-build-setup = "build-setup.yml"
+
 [profile.release]
 strip = true
+
+# The profile that 'dist' will build with.
+[profile.dist]
+inherits = "release"
+lto = "thin"

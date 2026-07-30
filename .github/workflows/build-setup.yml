@@ -1,0 +1,13 @@
+# Extra steps spliced into dist's build-local-artifacts job (via
+# `github-build-setup` in [workspace.metadata.dist]). They run on each target
+# runner after checkout and before `dist build`, so the frontend is built into
+# `dist/` before the Rust compile — the `app` crate is built with `--features
+# embed` (see app/Cargo.toml [package.metadata.dist]), and rust-embed reads
+# `dist/` at compile time.
+- name: Set up Node
+  uses: actions/setup-node@v4
+  with:
+    node-version: 22
+    cache: npm
+- name: Build frontend into dist/
+  run: npm ci && npm run build

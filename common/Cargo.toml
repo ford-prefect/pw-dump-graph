@@ -1,7 +1,10 @@
 [package]
 name = "pw-dump-graph-common"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 description = "Shared frontend-serving for the pw-dump-graph binaries"
 
 [features]

@@ -1,8 +1,15 @@
 [package]
 name = "pw-dump-graph-server"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 description = "In-memory keyed share service for pw-dump-graph"
+
+# Not part of the binary release (app-only for now).
+[package.metadata.dist]
+dist = false
 
 [features]
 default = []
