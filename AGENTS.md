@@ -72,10 +72,12 @@ in `[workspace.metadata.dist]` (root `Cargo.toml`) + `app/[package.metadata.dist
 
 - **`.github/workflows/release.yml` is generated — do not hand-edit it.** Change
   `[workspace.metadata.dist]` (or the crate metadata) and run `dist generate` to regenerate.
-- **`.github/workflows/build-setup.yml` is load-bearing:** it's spliced into the build job (via
+- **`.github/build-setup.yml` is load-bearing:** it's spliced into the build job (via
   `github-build-setup`) to run `npm ci && npm run build` *before* the Rust compile, because the
   release builds `app` with `--features embed` and rust-embed reads `dist/` at compile time.
-  If you change how the frontend builds or where it outputs, update this file.
+  If you change how the frontend builds or where it outputs, update this file. (It lives at
+  `.github/` root, not `.github/workflows/`, so GitHub Actions doesn't try to run the fragment
+  as a workflow — the path in `[workspace.metadata.dist]` is `../build-setup.yml`.)
 - Scope: **app-only** (`server` has `dist = false`), targets `x86_64`/`aarch64`
   `-unknown-linux-gnu`, no installer, `.tar.xz` + SHA256 checksums. Native runners, no container.
 - **Changelog is manual.** `CHANGELOG.md` (Keep a Changelog format) is the source of release

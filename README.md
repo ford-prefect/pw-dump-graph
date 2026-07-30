@@ -106,7 +106,7 @@ The release notes come from `CHANGELOG.md`: `dist` uses the body of the `## [X.Y
 matching the tag (falling back to just a download table if there's no match).
 
 Each target builds on a native runner (`ubuntu-22.04` / `ubuntu-22.04-arm`); the release
-workflow runs `npm ci && npm run build` first (`.github/workflows/build-setup.yml`) so the
+workflow runs `npm ci && npm run build` first (`.github/build-setup.yml`) so the
 `app` crate can be compiled with `--features embed` — the published binary is
 **self-contained** (frontend baked in). Only `app` is shipped; artifacts are `.tar.xz` archives
 with per-file `.sha256` plus an aggregate `sha256.sum`. Configure via `[workspace.metadata.dist]`
