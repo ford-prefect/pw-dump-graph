@@ -23,7 +23,7 @@ cargo-dist-version = "0.32.0"
 ci = "github"
 # Extra CI steps to run before building (builds the frontend into dist/ so the
 # app can be compiled with the embed feature).
-github-build-setup = "build-setup.yml"
+github-build-setup = "../build-setup.yml"
 
 [profile.release]
 strip = true
