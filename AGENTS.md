@@ -78,7 +78,12 @@ in `[workspace.metadata.dist]` (root `Cargo.toml`) + `app/[package.metadata.dist
   If you change how the frontend builds or where it outputs, update this file.
 - Scope: **app-only** (`server` has `dist = false`), targets `x86_64`/`aarch64`
   `-unknown-linux-gnu`, no installer, `.tar.xz` + SHA256 checksums. Native runners, no container.
-- Cutting a release: bump the workspace `version`, commit, `git tag vX.Y.Z && git push --tags`.
+- **Changelog is manual.** `CHANGELOG.md` (Keep a Changelog format) is the source of release
+  notes: `dist` extracts the `## [X.Y.Z]` section matching the tag. Add entries under
+  `## [Unreleased]` as you go; when cutting a release, rename that heading to the version with a
+  date and add a fresh empty `## [Unreleased]`.
+- Cutting a release: bump the workspace `version`, update `CHANGELOG.md`, commit,
+  `git tag vX.Y.Z && git push --tags`.
 
 ## Conventions
 
