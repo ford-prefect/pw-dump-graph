@@ -97,9 +97,13 @@ Prebuilt `pw-dump-graph` binaries for `x86_64` and `aarch64` Linux (glibc) are c
 [`dist`](https://opensource.axo.dev/cargo-dist/) on a version tag:
 
 ```bash
-# bump the workspace version in Cargo.toml, commit, then:
+# bump the workspace version in Cargo.toml, move CHANGELOG.md's "Unreleased"
+# entries under a new "## [X.Y.Z] - <date>" heading, commit, then:
 git tag v0.1.0 && git push --tags     # → .github/workflows/release.yml builds + publishes a GitHub Release
 ```
+
+The release notes come from `CHANGELOG.md`: `dist` uses the body of the `## [X.Y.Z]` section
+matching the tag (falling back to just a download table if there's no match).
 
 Each target builds on a native runner (`ubuntu-22.04` / `ubuntu-22.04-arm`); the release
 workflow runs `npm ci && npm run build` first (`.github/workflows/build-setup.yml`) so the
