@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-30
+
 ### Added
 
 - Interactive browser **patchbay** viewer for `pw-dump` output: nodes as boxes with individual
@@ -28,4 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (no persistence), so `pw-dump | curl -T- <host>` returns a ready-to-open link.
 - Prebuilt `x86_64` and `aarch64` Linux (glibc) release binaries via `dist`.
 
-[Unreleased]: https://github.com/ford-prefect/pw-dump-graph/commits/main
+[Unreleased]: https://github.com/ford-prefect/pw-dump-graph/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ford-prefect/pw-dump-graph/releases/tag/v0.1.0
