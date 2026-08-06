@@ -165,9 +165,9 @@ fn parse_args() -> Args {
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
-            "--remote" => remote = true,
+            "-r" | "--remote" => remote = true,
             "-m" | "--monitor" => monitor = true,
-            "--port" | "-p" => {
+            "-p" | "--port" => {
                 if let Some(v) = args.next().and_then(|v| v.parse().ok()) {
                     port = v;
                 }
