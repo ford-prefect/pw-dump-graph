@@ -237,7 +237,12 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&args.addr)
         .await
         .expect("bind");
-    let url = format!("http://{}/", args.addr.replace("0.0.0.0", "127.0.0.1"));
+    let url = format!(
+        "http://{}/",
+        args.addr
+            .replace("0.0.0.0", "<your-ip>")
+            .replace("127.0.0.1", "localhost")
+    );
     let mode = if args.monitor { "monitor" } else { "one-shot" };
     let net = if args.remote { "remote" } else { "local" };
     println!("pw-dump-graph on {url} ({net}, {mode})");
