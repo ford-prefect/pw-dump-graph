@@ -216,5 +216,11 @@ export function openFilterGraph(node: Node, graphIndex: number): void {
   if (title) title.textContent = `${node.name} · filter graph`;
   const body = dialog.querySelector(".fg-body");
   if (body) body.innerHTML = filterGraphSVG(fg);
+  // Dismiss on click outside the dialog box. A backdrop click reports the
+  // dialog element itself as the target (content clicks hit child nodes).
+  // Assigning onclick (not addEventListener) keeps this idempotent across opens.
+  dialog.onclick = (e) => {
+    if (e.target === dialog) dialog.close();
+  };
   dialog.showModal();
 }

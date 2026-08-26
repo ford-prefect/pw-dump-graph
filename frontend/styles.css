@@ -133,8 +133,9 @@ html, body {
   font-size: 12px;
   text-anchor: end;
   dominant-baseline: middle;
-  pointer-events: none;
+  cursor: pointer;
 }
+.node-fg-badge:hover { fill: var(--text); }
 
 .port-dot { fill: var(--port); stroke: #0c0f13; stroke-width: 1; }
 .port-dot.monitor { fill: var(--monitor); }

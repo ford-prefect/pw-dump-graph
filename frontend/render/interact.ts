@@ -120,6 +120,15 @@ export function attachInteractions(
       ev.stopPropagation();
       showDetails(graph.nodes.get(id));
     });
+    // The ⧉ badge opens the filter-graph drawing directly (first graph), instead
+    // of routing through the details panel.
+    const node = graph.nodes.get(id);
+    if (node?.filterGraphs?.length) {
+      g.querySelector(".node-fg-badge")?.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        openFilterGraph(node, node.filterGraphs![0].index);
+      });
+    }
   }
 
   function showDetails(node: Node | undefined) {
