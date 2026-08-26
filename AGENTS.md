@@ -103,6 +103,10 @@ in `[workspace.metadata.dist]` (root `Cargo.toml`) + `app/[package.metadata.dist
   loopbacks, echo-cancel) render inside a labelled box, laid out `source → filter → sink`.
 - Prefer verifying model/layout changes headlessly (they are DOM-free); render/interact
   need a DOM.
+- Test dumps that shouldn't ship live in `fixtures/` (NOT `examples/`, which is Vite's
+  `publicDir` and gets bundled into `dist/` + embedded in the binary). `examples/` holds only
+  the one bundled sample (`pw-dump.json`). E.g. `fixtures/pw-node-audioconvert-graph.json` is a
+  dump with a loaded `audioconvert.filter-graph` for exercising the internal-filter-graph view.
 
 ## Commits
 
