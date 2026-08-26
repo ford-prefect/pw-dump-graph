@@ -272,7 +272,7 @@ dialog menu button {
 }
 #details .fg-view:hover { border-color: var(--edge); }
 
-#filter-graph-dialog { width: min(760px, 92vw); }
+#filter-graph-dialog { width: min(960px, 94vw); }
 #filter-graph-dialog form { margin: 0; }
 #filter-graph-dialog .close {
   position: absolute;
@@ -293,4 +293,7 @@ dialog menu button {
 .fg-node-g:hover .fg-node { stroke: var(--edge); }
 .fg-label { fill: var(--text); font-size: 13px; font-weight: 600; dominant-baseline: middle; }
 .fg-name { fill: var(--muted); font-size: 11px; dominant-baseline: middle; }
+.fg-divider { stroke: var(--node-stroke); stroke-width: 1; }
+.fg-ctrl-k { fill: var(--muted); font-size: 10px; dominant-baseline: middle; }
+.fg-ctrl-v { fill: var(--text); font-size: 10px; dominant-baseline: middle; }
 .fg-edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }

@@ -1,19 +1,25 @@
 // Layer 4 — internal filter-graph drawing.
 // Self-contained: lays out and draws a node's internal audio filter graph
-// (audioconvert.filter-graph) as a small left→right SVG shown in a popup. No
-// elkjs, fully synchronous — these graphs are tiny (a handful of DSP nodes,
-// usually a linear chain). Reuses only the pure string helpers from svg.ts.
+// (audioconvert.filter-graph) as a small left→right SVG shown in a popup —
+// each DSP node a box with its controls enumerated in the body. No elkjs,
+// fully synchronous — these graphs are tiny (a handful of DSP nodes, usually a
+// linear chain). Reuses only the pure string helpers from svg.ts.
 
 import type { FilterGraph, Node } from "../model.js";
 import { esc, smoothPath, truncate } from "./svg.js";
 
-const BOX_W = 164;
-const BOX_H = 56;
+const BOX_W = 176;
 const COL_GAP = 48; // horizontal gap between layers
 const ROW_GAP = 22; // vertical gap between nodes sharing a layer
 const PAD = 18;
+const HEADER_BOTTOM = 44; // y within box of the divider under label + name
+const CTRL_STEP = 16; // height of one control row
+const BOX_BOTTOM_PAD = 12; // gap below the last control row
+const HEADER_ONLY_H = 48; // box height for a node with no controls
+const SIDE_PAD = 14; // left/right inset for text
 const LABEL_CHAR_W = 7.1; // ~13px font
 const NAME_CHAR_W = 6.1; // ~11px font
+const CTRL_CHAR_W = 5.6; // ~10px font
 
 interface Box {
   name: string;
@@ -92,9 +98,18 @@ export function layoutFilterGraph(fg: FilterGraph): Layout {
     colCount.set(c, r + 1);
   }
 
+  // Uniform box height sized to the busiest node's control count, so columns
+  // stay aligned.
+  const maxControls = Math.max(
+    0,
+    ...order.map((n) => Object.keys(byName.get(n)!.controls ?? {}).length),
+  );
+  const boxH =
+    maxControls > 0 ? HEADER_BOTTOM + maxControls * CTRL_STEP + BOX_BOTTOM_PAD : HEADER_ONLY_H;
+
   const numCols = Math.max(0, ...order.map((n) => col.get(n)! + 1));
   const maxRows = Math.max(0, ...[...colCount.values()]);
-  const contentH = maxRows > 0 ? maxRows * BOX_H + (maxRows - 1) * ROW_GAP : 0;
+  const contentH = maxRows > 0 ? maxRows * boxH + (maxRows - 1) * ROW_GAP : 0;
 
   const idx = new Map<string, number>();
   const boxes: Box[] = order.map((name, i) => {
@@ -102,7 +117,7 @@ export function layoutFilterGraph(fg: FilterGraph): Layout {
     const c = col.get(name)!;
     const r = rows.get(name)!;
     const k = colCount.get(c)!;
-    const colH = k * BOX_H + (k - 1) * ROW_GAP;
+    const colH = k * boxH + (k - 1) * ROW_GAP;
     const yOffset = PAD + (contentH - colH) / 2; // vertically center each column
     const meta = byName.get(name)!;
     return {
@@ -110,9 +125,9 @@ export function layoutFilterGraph(fg: FilterGraph): Layout {
       label: meta.label,
       controls: meta.controls,
       x: PAD + c * (BOX_W + COL_GAP),
-      y: yOffset + r * (BOX_H + ROW_GAP),
+      y: yOffset + r * (boxH + ROW_GAP),
       w: BOX_W,
-      h: BOX_H,
+      h: boxH,
     };
   });
 
@@ -128,12 +143,21 @@ export function layoutFilterGraph(fg: FilterGraph): Layout {
   };
 }
 
-function controlsText(c?: Record<string, unknown>): string {
-  return c ? Object.entries(c).map(([k, v]) => `${k} ${v}`).join(", ") : "";
+/** One control as a "key value" row inside a node box: key on the left, value
+ *  right-aligned, each clipped to roughly its half of the inner width. */
+function controlRow(x: number, y: number, w: number, key: string, value: unknown): string {
+  const inner = w - SIDE_PAD * 2;
+  const k = truncate(key, Math.floor((inner * 0.55) / CTRL_CHAR_W));
+  const v = truncate(String(value), Math.floor((inner * 0.45) / CTRL_CHAR_W));
+  return (
+    `<text class="fg-ctrl-k" x="${x + SIDE_PAD}" y="${y}">${esc(k)}</text>` +
+    `<text class="fg-ctrl-v" x="${x + w - SIDE_PAD}" y="${y}" text-anchor="end">${esc(v)}</text>`
+  );
 }
 
 /** Render the filter graph as a standalone SVG string (left→right). Each DSP
- *  node is a box (algorithm label + name); its controls are a hover tooltip. */
+ *  node is a box: algorithm label, name, then its controls enumerated in the
+ *  body (Freq/Q/Gain, …). */
 export function filterGraphSVG(fg: FilterGraph): string {
   const { boxes, edges, width, height } = layoutFilterGraph(fg);
 
@@ -151,19 +175,24 @@ export function filterGraphSVG(fg: FilterGraph): string {
 
   const nodeEls = boxes
     .map((b) => {
-      const cx = b.x + b.w / 2;
-      const label = b.label ? truncate(b.label, Math.floor((b.w - 16) / LABEL_CHAR_W)) : "";
-      const name = truncate(b.name, Math.floor((b.w - 16) / NAME_CHAR_W));
-      const ctrl = controlsText(b.controls);
-      const tip = ctrl ? `${b.name} — ${ctrl}` : b.name;
+      const tx = b.x + SIDE_PAD;
+      const label = b.label ? truncate(b.label, Math.floor((b.w - SIDE_PAD * 2) / LABEL_CHAR_W)) : "";
+      const name = truncate(b.name, Math.floor((b.w - SIDE_PAD * 2) / NAME_CHAR_W));
+      const entries = Object.entries(b.controls ?? {});
+      const ctrlEls = entries
+        .map(([k, v], i) => controlRow(b.x, b.y + HEADER_BOTTOM + CTRL_STEP * (i + 1), b.w, k, v))
+        .join("");
+      const divider = entries.length
+        ? `<line class="fg-divider" x1="${b.x + 10}" y1="${b.y + HEADER_BOTTOM}" x2="${b.x + b.w - 10}" y2="${b.y + HEADER_BOTTOM}" />`
+        : "";
       return (
         `<g class="fg-node-g">` +
-        `<title>${esc(tip)}</title>` +
+        `<title>${esc(b.name)}</title>` +
         `<rect class="fg-node" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="7" />` +
-        (label
-          ? `<text class="fg-label" x="${cx}" y="${b.y + 23}" text-anchor="middle">${esc(label)}</text>`
-          : "") +
-        `<text class="fg-name" x="${cx}" y="${b.y + (label ? 40 : 32)}" text-anchor="middle">${esc(name)}</text>` +
+        (label ? `<text class="fg-label" x="${tx}" y="${b.y + 19}">${esc(label)}</text>` : "") +
+        `<text class="fg-name" x="${tx}" y="${b.y + (label ? 35 : 28)}">${esc(name)}</text>` +
+        divider +
+        ctrlEls +
         `</g>`
       );
     })
