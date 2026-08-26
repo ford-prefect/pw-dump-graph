@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - Add `pw-dump-graph -r` as an alternative to `--remote`
+- Surface a node's internal audio filter graph (`audioconvert.filter-graph`): a `⧉` badge on
+  such nodes, and the graph's DSP nodes and links listed in the node details panel
 
 ## [0.1.0] - 2026-07-30
 
