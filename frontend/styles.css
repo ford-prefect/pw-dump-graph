@@ -127,6 +127,14 @@ html, body {
   pointer-events: none;
 }
 .node-accent { stroke-width: 4; }
+/* Corner glyph marking a node that runs an internal filter graph. */
+.node-fg-badge {
+  fill: var(--muted);
+  font-size: 12px;
+  text-anchor: end;
+  dominant-baseline: middle;
+  pointer-events: none;
+}
 
 .port-dot { fill: var(--port); stroke: #0c0f13; stroke-width: 1; }
 .port-dot.monitor { fill: var(--monitor); }
@@ -196,6 +204,12 @@ html, body {
   border-top: 2px dashed var(--edge);
   border-radius: 0;
   background: none;
+}
+#legend .glyph {
+  width: 10px;
+  font-style: normal;
+  color: var(--muted);
+  text-align: center;
 }
 
 #details {

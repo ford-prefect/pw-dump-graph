@@ -113,7 +113,10 @@ function renderNode(
   const subChars = Math.floor((laid.w - 26) / PORT_CHAR_W);
 
   const title = el("text", { class: "node-title", x: laid.x + 13, y: lineY(line++) });
-  title.textContent = truncate(node.name, Math.floor((laid.w - 26) / TITLE_CHAR_W));
+  // Leave room on the title row for the filter-graph badge (drawn top-right) so
+  // a long name doesn't run into the glyph.
+  const titleRightPad = node.filterGraphs?.length ? 16 : 0;
+  title.textContent = truncate(node.name, Math.floor((laid.w - 26 - titleRightPad) / TITLE_CHAR_W));
   g.appendChild(title);
   if (node.mediaClass) {
     const sub = el("text", { class: "node-sub", x: laid.x + 13, y: lineY(line++) });
@@ -124,6 +127,19 @@ function renderNode(
     const fmt = el("text", { class: "node-fmt", x: laid.x + 13, y: lineY(line++) });
     fmt.textContent = truncate(node.format, subChars);
     g.appendChild(fmt);
+  }
+
+  // Badge: this node runs one or more internal filter graphs. A single glyph in
+  // the header's top-right corner — no extra header line, so the layout is
+  // untouched. Details are in the panel (nodeDetailsHTML).
+  if (node.filterGraphs?.length) {
+    const badge = el("text", { class: "node-fg-badge", x: laid.x + laid.w - 8, y: lineY(0) });
+    badge.textContent = "⧉";
+    const n = node.filterGraphs.length;
+    const bt = el("title");
+    bt.textContent = n === 1 ? "internal filter graph" : `${n} internal filter graphs`;
+    badge.appendChild(bt);
+    g.appendChild(badge);
   }
 
   // Separator marking the reserved header band, so the title reads as its own
@@ -317,7 +333,38 @@ export function nodeDetailsHTML(node: Node, connected: Set<number>): string {
     <table>${propRows}</table>
     <div class="section">Ports (${node.ports.length}) — format</div>
     <table>${ports}</table>
+    ${filterGraphsHTML(node)}
   `;
+}
+
+/** Details block for a node's internal filter graph(s): the DSP nodes and how
+ *  they're wired. Empty string when the node has none (the common case). */
+function filterGraphsHTML(node: Node): string {
+  if (!node.filterGraphs?.length) return "";
+  const row = (k: string, v: string) => `<tr><td class="k">${esc(k)}</td><td>${esc(v)}</td></tr>`;
+  const controls = (c?: Record<string, unknown>) =>
+    c ? Object.entries(c).map(([k, v]) => `${k} ${v}`).join(", ") : "";
+  const multiple = node.filterGraphs.length > 1;
+
+  return node.filterGraphs
+    .map((fg) => {
+      const heading = `Filter graph${multiple ? ` #${fg.index}` : ""}`;
+      const nodeRows = fg.nodes
+        .map((n) => row(n.name, [n.label, controls(n.controls)].filter(Boolean).join(" · ")))
+        .join("");
+      const linkRows = fg.links
+        .map((l) => `<tr><td colspan="2">${esc(l.output)} → ${esc(l.input)}</td></tr>`)
+        .join("");
+      const links = linkRows
+        ? `<div class="section">Links (${fg.links.length})</div><table>${linkRows}</table>`
+        : "";
+      return `
+        <div class="section">${heading} — ${fg.nodes.length} nodes</div>
+        <table>${nodeRows}</table>
+        ${links}
+      `;
+    })
+    .join("");
 }
 
 function esc(s: string): string {

@@ -30,6 +30,10 @@ export interface Node {
   // audio/video adapter), from the node's `Format` param — e.g.
   // "S32LE · 48 kHz · 2ch". Distinct from a port's between-nodes format.
   format?: string;
+  // Filter graph(s) running *inside* this node (audioconvert.filter-graph.N).
+  // Undefined for the vast majority of nodes; present only when one is actually
+  // loaded, so this edge case never touches the common path.
+  filterGraphs?: FilterGraph[];
   ports: Port[]; // may be empty (e.g. driver nodes)
   props: Record<string, unknown>;
 }
@@ -74,6 +78,88 @@ interface FormatPod {
   channels?: number;
   size?: { width?: number; height?: number };
   framerate?: { num?: number; denom?: number };
+}
+
+/** A filter graph running inside an audioconvert node (from
+ *  `audioconvert.filter-graph.N`). A little PipeWire graph in its own right:
+ *  DSP nodes (builtin/ladspa/…) wired output→input. Pure data, no geometry. */
+export interface FilterGraphNode {
+  name: string;
+  label?: string; // the DSP algorithm, e.g. "bq_peaking"
+  type?: string; // "builtin", "ladspa", …
+  controls?: Record<string, unknown>; // e.g. { Freq: 950, Q: 2, Gain: -6 }
+}
+export interface FilterGraphLink {
+  output: string; // "node:port", e.g. "eq_band_1:Out"
+  input: string;
+}
+export interface FilterGraph {
+  index: number; // the N in audioconvert.filter-graph.N (0 for the bare key)
+  nodes: FilterGraphNode[];
+  links: FilterGraphLink[];
+}
+
+/** Read the flat SPA `[key, value, key, value, …]` list PipeWire uses for a
+ *  Props param entry as key→value pairs. */
+function spaKeyValues(params: unknown): Array<[string, unknown]> {
+  if (!Array.isArray(params)) return [];
+  const out: Array<[string, unknown]> = [];
+  for (let i = 0; i + 1 < params.length; i += 2) {
+    const k = params[i];
+    if (typeof k === "string") out.push([k, params[i + 1]]);
+  }
+  return out;
+}
+
+const FILTER_GRAPH_KEY = /^audioconvert\.filter-graph(?:\.(\d+))?$/;
+
+/** Extract loaded internal filter graphs from a node's `Props` param. Returns
+ *  undefined unless at least one graph carries a non-empty, parseable value —
+ *  the empty string that most nodes advertise (schema only) is skipped. */
+function parseFilterGraphs(info: RawInfo | undefined): FilterGraph[] | undefined {
+  const propsParams = info?.params?.["Props"];
+  if (!Array.isArray(propsParams)) return undefined;
+  const graphs: FilterGraph[] = [];
+  for (const entry of propsParams) {
+    const kvs = spaKeyValues((entry as { params?: unknown } | undefined)?.params);
+    for (const [key, value] of kvs) {
+      const m = FILTER_GRAPH_KEY.exec(key);
+      if (!m || typeof value !== "string" || value.trim() === "") continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        continue; // tolerate non-strict-JSON dumps: skip rather than crash
+      }
+      const nodes = Array.isArray((parsed as { nodes?: unknown })?.nodes)
+        ? ((parsed as { nodes: unknown[] }).nodes.map(toFilterGraphNode))
+        : [];
+      const links = Array.isArray((parsed as { links?: unknown })?.links)
+        ? ((parsed as { links: unknown[] }).links.map(toFilterGraphLink))
+        : [];
+      graphs.push({ index: m[1] ? Number(m[1]) : 0, nodes, links });
+    }
+  }
+  if (graphs.length === 0) return undefined;
+  graphs.sort((a, b) => a.index - b.index);
+  return graphs;
+}
+
+function toFilterGraphNode(n: unknown): FilterGraphNode {
+  const o = (n ?? {}) as Record<string, unknown>;
+  return {
+    name: str(o.name) ?? "?",
+    label: str(o.label),
+    type: str(o.type),
+    controls:
+      o.control && typeof o.control === "object"
+        ? (o.control as Record<string, unknown>)
+        : undefined,
+  };
+}
+function toFilterGraphLink(l: unknown): FilterGraphLink {
+  const o = (l ?? {}) as Record<string, unknown>;
+  return { output: str(o.output) ?? "", input: str(o.input) ?? "" };
 }
 
 function khz(rate: number): string {
@@ -127,6 +213,7 @@ function buildNode(raw: RawObject): Node {
     mediaClass: str(props["media.class"]),
     linkGroup: str(props["node.link-group"]),
     format: formatParam(raw.info),
+    filterGraphs: parseFilterGraphs(raw.info),
     ports: [],
     props,
   };
