@@ -29,7 +29,7 @@ parse → model → layout adapter → PositionedGraph → render
 | parse | `frontend/parse.ts` | nothing |
 | model | `frontend/model.ts` | parse |
 | layout | `frontend/layout/types.ts` (seam), `frontend/layout/elk.ts` (adapter) | elkjs — adapter only |
-| render | `frontend/render/svg.ts`, `frontend/render/interact.ts` | model types + layout seam |
+| render | `frontend/render/svg.ts`, `frontend/render/interact.ts`, `frontend/render/filtergraph.ts` | model types + layout seam |
 
 ## Commands
 

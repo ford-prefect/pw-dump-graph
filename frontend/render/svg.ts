@@ -28,7 +28,7 @@ function el<K extends keyof SVGElementTagNameMap>(
   return node;
 }
 
-function truncate(text: string, maxChars: number): string {
+export function truncate(text: string, maxChars: number): string {
   if (maxChars < 2) return "";
   return text.length > maxChars ? text.slice(0, maxChars - 1) + "…" : text;
 }
@@ -46,7 +46,7 @@ const HEADER_TOP = 8;
 const HEADER_LINE = 14;
 
 /** Convert a polyline (elk spline control points) into a smooth path string. */
-function smoothPath(points: { x: number; y: number }[]): string {
+export function smoothPath(points: { x: number; y: number }[]): string {
   if (points.length < 2) return "";
   if (points.length === 2) {
     const [a, b] = points;
@@ -337,36 +337,23 @@ export function nodeDetailsHTML(node: Node, connected: Set<number>): string {
   `;
 }
 
-/** Details block for a node's internal filter graph(s): the DSP nodes and how
- *  they're wired. Empty string when the node has none (the common case). */
+/** Details block for a node's internal filter graph(s): a compact summary plus a
+ *  button that opens the L→R drawing in a popup (wired in interact.ts). Empty
+ *  string when the node has none (the common case). */
 function filterGraphsHTML(node: Node): string {
   if (!node.filterGraphs?.length) return "";
-  const row = (k: string, v: string) => `<tr><td class="k">${esc(k)}</td><td>${esc(v)}</td></tr>`;
-  const controls = (c?: Record<string, unknown>) =>
-    c ? Object.entries(c).map(([k, v]) => `${k} ${v}`).join(", ") : "";
   const multiple = node.filterGraphs.length > 1;
-
   return node.filterGraphs
     .map((fg) => {
-      const heading = `Filter graph${multiple ? ` #${fg.index}` : ""}`;
-      const nodeRows = fg.nodes
-        .map((n) => row(n.name, [n.label, controls(n.controls)].filter(Boolean).join(" · ")))
-        .join("");
-      const linkRows = fg.links
-        .map((l) => `<tr><td colspan="2">${esc(l.output)} → ${esc(l.input)}</td></tr>`)
-        .join("");
-      const links = linkRows
-        ? `<div class="section">Links (${fg.links.length})</div><table>${linkRows}</table>`
-        : "";
+      const heading = `Filter graph${multiple ? ` #${fg.index}` : ""} — ${fg.nodes.length} nodes`;
       return `
-        <div class="section">${heading} — ${fg.nodes.length} nodes</div>
-        <table>${nodeRows}</table>
-        ${links}
+        <div class="section">${esc(heading)}</div>
+        <button class="fg-view" type="button" data-fg-index="${fg.index}">View ⧉</button>
       `;
     })
     .join("");
 }
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 }

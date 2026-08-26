@@ -5,6 +5,7 @@
 import type { Graph, Node } from "../model.js";
 import type { PositionedGraph } from "../layout/types.js";
 import { nodeDetailsHTML, updateGrid } from "./svg.js";
+import { openFilterGraph } from "./filtergraph.js";
 
 export interface View {
   x: number;
@@ -126,6 +127,11 @@ export function attachInteractions(
     details.innerHTML = nodeDetailsHTML(node, connectedPorts);
     details.hidden = false;
     details.querySelector(".close")?.addEventListener("click", () => (details.hidden = true));
+    // Open the L→R filter-graph drawing in a popup (present only for nodes that
+    // run one).
+    for (const btn of details.querySelectorAll<HTMLElement>(".fg-view")) {
+      btn.addEventListener("click", () => openFilterGraph(node, Number(btn.dataset.fgIndex)));
+    }
   }
 
   // Expose the current view so a live re-render can carry pan/zoom forward.

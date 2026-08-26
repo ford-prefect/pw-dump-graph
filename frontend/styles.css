@@ -256,3 +256,41 @@ dialog menu button {
   background: #262c35; color: var(--text);
   border: 1px solid #333b46; border-radius: 6px; padding: 6px 14px; cursor: pointer; font: inherit;
 }
+
+/* Filter-graph popup: the "View" button in the details panel, the dialog, and
+   the left→right mini-diagram inside it. Reuses the :root palette. */
+#details .fg-view {
+  margin-top: 6px;
+  background: #262c35;
+  color: var(--text);
+  border: 1px solid #333b46;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+#details .fg-view:hover { border-color: var(--edge); }
+
+#filter-graph-dialog { width: min(760px, 92vw); }
+#filter-graph-dialog form { margin: 0; }
+#filter-graph-dialog .close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+#filter-graph-dialog .fg-title { margin: 0 0 10px; font-size: 14px; }
+/* Scroll (both axes) rather than shrink, so nodes stay readable on long chains. */
+#filter-graph-dialog .fg-body { overflow: auto; }
+
+.fg-svg { display: block; }
+.fg-node { fill: var(--node-bg); stroke: var(--node-stroke); stroke-width: 1; }
+.fg-node-g:hover .fg-node { stroke: var(--edge); }
+.fg-label { fill: var(--text); font-size: 13px; font-weight: 600; dominant-baseline: middle; }
+.fg-name { fill: var(--muted); font-size: 11px; dominant-baseline: middle; }
+.fg-edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }
