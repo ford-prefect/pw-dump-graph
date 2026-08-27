@@ -5,6 +5,12 @@
 //! persisted: the store is bounded by a max entry count and a TTL, and everything is
 //! lost on restart. The same binary also serves the built frontend (`dist/`).
 //!
+//! Optionally (`PWG_STATE_FILE`) the store is handed off across a *restart* — written
+//! once on graceful shutdown (SIGTERM/Ctrl-C) and read back **then deleted** on startup,
+//! so the file exists only during the restart window. This is a transient handoff for
+//! deploying a new binary, NOT durable storage: a hard kill writes nothing, and nothing
+//! sits on disk while the server runs.
+//!
 //! Dumps are stored **minified and gzip-compressed** (pw-dump JSON is pretty-printed
 //! and highly repetitive, ~15× here), so far more entries fit in a given memory budget.
 //! `GET` serves the stored gzip bytes verbatim with `Content-Encoding: gzip` to clients
@@ -99,7 +105,75 @@ impl Store {
             None => None,
         }
     }
+
+    /// Serialize live entries (in insertion order) into a transient handoff blob:
+    /// `MAGIC`, then per entry `key_len:u8, key, remaining_secs:u64le, gz_len:u32le, gz`.
+    /// Entries with no life left are skipped (their remaining is 0).
+    fn snapshot(&self, now: Instant) -> Vec<u8> {
+        let mut out = Vec::from(SNAPSHOT_MAGIC);
+        for key in &self.order {
+            let Some(e) = self.map.get(key) else { continue };
+            let remaining = self.ttl.saturating_sub(now.duration_since(e.created));
+            if remaining.is_zero() || key.len() > u8::MAX as usize {
+                continue;
+            }
+            out.push(key.len() as u8);
+            out.extend_from_slice(key.as_bytes());
+            out.extend_from_slice(&remaining.as_secs().to_le_bytes());
+            out.extend_from_slice(&(e.gz.len() as u32).to_le_bytes());
+            out.extend_from_slice(&e.gz);
+        }
+        out
+    }
+
+    /// Rebuild a store from a handoff blob, restoring each entry's remaining life.
+    /// Best-effort: a blob missing the magic yields an empty store, and a truncated
+    /// tail simply drops the entries that didn't fully parse. `max` is then enforced.
+    fn from_snapshot(max: usize, ttl: Duration, data: &[u8]) -> Store {
+        let mut store = Store::new(max, ttl);
+        let now = Instant::now();
+        if data.len() < SNAPSHOT_MAGIC.len() || &data[..SNAPSHOT_MAGIC.len()] != SNAPSHOT_MAGIC {
+            return store;
+        }
+        let mut p = SNAPSHOT_MAGIC.len();
+        // Read a fixed slice and advance the cursor, or None if not enough bytes.
+        let take = |p: &mut usize, n: usize| -> Option<&[u8]> {
+            let s = data.get(*p..*p + n)?;
+            *p += n;
+            Some(s)
+        };
+        while let Some(klen) = take(&mut p, 1).map(|b| b[0] as usize) {
+            let Some(kb) = take(&mut p, klen) else { break };
+            let Some(rem) = take(&mut p, 8) else { break };
+            let Some(glen) =
+                take(&mut p, 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()) as usize)
+            else {
+                break;
+            };
+            let Some(gz) = take(&mut p, glen) else { break };
+            let Ok(key) = std::str::from_utf8(kb) else {
+                continue;
+            };
+            let remaining = Duration::from_secs(u64::from_le_bytes(rem.try_into().unwrap()));
+            // created so that ttl - (now - created) == remaining; guard boot-time underflow.
+            let created = now
+                .checked_sub(ttl.saturating_sub(remaining))
+                .unwrap_or(now);
+            store.map.insert(
+                key.to_owned(),
+                Entry {
+                    gz: Bytes::copy_from_slice(gz),
+                    created,
+                },
+            );
+            store.order.push_back(key.to_owned());
+        }
+        store.evict(now); // enforce max (and drop anything already expired)
+        store
+    }
 }
+
+const SNAPSHOT_MAGIC: &[u8] = b"PWG1";
 
 type Shared = Arc<Mutex<Store>>;
 
@@ -213,14 +287,74 @@ fn env_parse<T: std::str::FromStr>(key: &str, default: T) -> T {
         .unwrap_or(default)
 }
 
+/// Load the handoff file (if present) into a store, then delete it — so the dumps
+/// live on disk only across the restart, never while the server is running. Any
+/// error (missing/unreadable/corrupt) falls back to an empty store.
+fn load_and_clear(path: &str, max: usize, ttl: Duration) -> Store {
+    match std::fs::read(path) {
+        Ok(data) => {
+            let store = Store::from_snapshot(max, ttl, &data);
+            let _ = std::fs::remove_file(path);
+            store
+        }
+        Err(_) => Store::new(max, ttl),
+    }
+}
+
+/// Write the store to `path` for handoff, privately (0600) and atomically
+/// (temp + rename). Best-effort: a failure is logged, not fatal.
+fn save_snapshot(path: &str, store: &Store) {
+    let blob = store.snapshot(Instant::now());
+    let tmp = format!("{path}.tmp");
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600); // the dumps were private in RAM; keep them private on disk
+    }
+    let result = opts
+        .open(&tmp)
+        .and_then(|mut f| f.write_all(&blob))
+        .and_then(|()| std::fs::rename(&tmp, path));
+    if let Err(e) = result {
+        eprintln!("pw-dump-graph-server: could not save state to {path}: {e}");
+    }
+}
+
+/// Resolve when the process is asked to shut down: SIGTERM (deploys) or Ctrl-C (dev).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let term = async {
+        use tokio::signal::unix::{signal, SignalKind};
+        if let Ok(mut s) = signal(SignalKind::terminate()) {
+            s.recv().await;
+        }
+    };
+    #[cfg(not(unix))]
+    let term = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = term => {}
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let max = env_parse("PWG_MAX_ENTRIES", 500usize);
     let ttl = Duration::from_secs(env_parse("PWG_TTL_SECS", 24 * 3600u64));
     let limit = env_parse("PWG_BODY_LIMIT", 8 * 1024 * 1024usize);
     let addr = std::env::var("PWG_ADDR").unwrap_or_else(|_| "0.0.0.0:8787".to_string());
+    let state_file = std::env::var("PWG_STATE_FILE").ok();
 
-    let store: Shared = Arc::new(Mutex::new(Store::new(max, ttl)));
+    // Restore a handoff from a previous graceful shutdown (and delete it), else start empty.
+    let store: Shared = Arc::new(Mutex::new(match &state_file {
+        Some(path) => load_and_clear(path, max, ttl),
+        None => Store::new(max, ttl),
+    }));
 
     let app = Router::new()
         // Root: GET serves the frontend; POST/PUT accept a piped dump and reply with
@@ -230,11 +364,30 @@ async fn main() {
         .route("/api/dumps/{key}", get(fetch))
         .fallback(frontend) // embedded/disk frontend + SPA fallback (common crate)
         .layer(DefaultBodyLimit::max(limit))
-        .with_state(store);
+        .with_state(store.clone());
 
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");
     println!("pw-dump-graph-server on http://{addr} (max={max}, ttl={ttl:?})");
-    axum::serve(listener, app).await.expect("serve");
+    if let Some(path) = &state_file {
+        println!(
+            "  state handoff via {path} (restored {} entries)",
+            store.lock().unwrap().map.len()
+        );
+    }
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .expect("serve");
+
+    // Graceful shutdown: hand the store off for the next start to pick up.
+    if let Some(path) = &state_file {
+        let store = store.lock().unwrap();
+        save_snapshot(path, &store);
+        eprintln!(
+            "pw-dump-graph-server: saved {} entries to {path}",
+            store.map.len()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -307,5 +460,93 @@ mod tests {
                 .unwrap()
                 .len()
         );
+    }
+
+    #[test]
+    fn snapshot_roundtrips_with_order() {
+        let ttl = Duration::from_secs(3600);
+        let mut s = Store::new(100, ttl);
+        let t = Instant::now();
+        s.insert("aaa".into(), bytes("one"), t);
+        s.insert("bbb".into(), bytes("two"), t);
+        let blob = s.snapshot(t);
+
+        let mut r = Store::from_snapshot(100, ttl, &blob);
+        assert_eq!(r.get("aaa", Instant::now()).as_deref(), Some(&b"one"[..]));
+        assert_eq!(r.get("bbb", Instant::now()).as_deref(), Some(&b"two"[..]));
+        // Insertion order preserved (aaa is oldest at the front).
+        assert_eq!(r.order, ["aaa", "bbb"]);
+    }
+
+    #[test]
+    fn snapshot_skips_expired_and_carries_remaining() {
+        let ttl = Duration::from_secs(100);
+        let mut s = Store::new(100, ttl);
+        let t0 = Instant::now();
+        s.insert("old".into(), bytes("x"), t0);
+        s.insert("new".into(), bytes("y"), t0 + Duration::from_secs(90));
+        // Snapshot 101s in: "old" is past its 100s life; "new" (age 11s) has ~89s left.
+        let blob = s.snapshot(t0 + Duration::from_secs(101));
+
+        let r = Store::from_snapshot(100, ttl, &blob);
+        assert!(!r.map.contains_key("old"), "expired entry not serialized");
+        assert!(r.map.contains_key("new"));
+        // "new" still has life left after reload.
+        let remaining = ttl - Instant::now().duration_since(r.map["new"].created);
+        assert!(
+            remaining > Duration::from_secs(60),
+            "remaining ~95s: {remaining:?}"
+        );
+    }
+
+    #[test]
+    fn from_snapshot_enforces_max() {
+        let ttl = Duration::from_secs(3600);
+        let mut s = Store::new(100, ttl);
+        let t = Instant::now();
+        s.insert("a".into(), bytes("1"), t);
+        s.insert("b".into(), bytes("2"), t);
+        s.insert("c".into(), bytes("3"), t);
+        let blob = s.snapshot(t);
+
+        // Reload with a smaller cap: the oldest ("a") is evicted.
+        let mut r = Store::from_snapshot(2, ttl, &blob);
+        assert_eq!(r.map.len(), 2);
+        assert!(r.get("a", Instant::now()).is_none());
+        assert!(r.get("b", Instant::now()).is_some());
+        assert!(r.get("c", Instant::now()).is_some());
+    }
+
+    #[test]
+    fn from_snapshot_tolerates_corruption() {
+        let ttl = Duration::from_secs(3600);
+        // No magic → empty store.
+        assert_eq!(Store::from_snapshot(100, ttl, b"garbage").map.len(), 0);
+        assert_eq!(Store::from_snapshot(100, ttl, b"").map.len(), 0);
+
+        // Valid head, truncated tail: the first entry survives, the torn one is dropped.
+        let mut s = Store::new(100, ttl);
+        let t = Instant::now();
+        s.insert("aaa".into(), bytes("one"), t);
+        s.insert("bbb".into(), bytes("two"), t);
+        let mut blob = s.snapshot(t);
+        blob.truncate(blob.len() - 2); // chop the end of "bbb"'s payload
+        let r = Store::from_snapshot(100, ttl, &blob);
+        assert!(r.map.contains_key("aaa"));
+        assert!(!r.map.contains_key("bbb"));
+    }
+
+    #[test]
+    fn load_and_clear_consumes_the_file() {
+        let ttl = Duration::from_secs(3600);
+        let mut s = Store::new(100, ttl);
+        s.insert("aaa".into(), bytes("one"), Instant::now());
+        let path = std::env::temp_dir().join(format!("pwg-test-{}", gen_key()));
+        let p = path.to_str().unwrap();
+        std::fs::write(&path, s.snapshot(Instant::now())).unwrap();
+
+        let mut r = load_and_clear(p, 100, ttl);
+        assert_eq!(r.get("aaa", Instant::now()).as_deref(), Some(&b"one"[..]));
+        assert!(!path.exists(), "handoff file must be deleted after load");
     }
 }
