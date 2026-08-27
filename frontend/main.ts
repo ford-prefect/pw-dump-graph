@@ -3,7 +3,7 @@
 // Data source precedence: ?url= -> dropped/selected file -> pasted JSON -> bundled sample.
 
 import "./styles.css";
-import { buildGraph, type Graph } from "./model.js";
+import { buildGraph, withoutMeters, type Graph } from "./model.js";
 import { elkLayout } from "./layout/elk.js";
 import { renderGraph } from "./render/svg.js";
 import { attachInteractions, type View } from "./render/interact.js";
@@ -18,9 +18,15 @@ const pasteDialog = must<HTMLDialogElement>("#paste-dialog");
 const pasteArea = must<HTMLTextAreaElement>("#paste-area");
 const pasteLoad = must<HTMLButtonElement>("#paste-load");
 const shareBtn = must<HTMLButtonElement>("#share-btn");
+const hideMetersBtn = must<HTMLButtonElement>("#hide-meters-btn");
 
 // The most recently rendered dump text, so Share can POST it to the server.
 let lastDumpText: string | null = null;
+// Its source label, so a toggle-driven re-render keeps the original provenance.
+let lastSourceLabel = "";
+// Hide audio-manager peak-meter streams (stream.monitor) to de-noise the graph.
+// On by default; in-memory only (resets on reload).
+let hideMeters = true;
 // Cached share link for the currently-shown dump: primed when we arrive via ?g=,
 // set after a first Share, and cleared when a different dump loads — so repeated
 // Share clicks reuse the same link instead of minting a new key each time.
@@ -48,6 +54,10 @@ async function renderText(text: string, sourceLabel: string, keepView = false): 
     setStatus(`Failed to parse ${sourceLabel}: ${(err as Error).message}`, true);
     return;
   }
+  const total = graph.nodes.size;
+  if (hideMeters) graph = withoutMeters(graph);
+  const hidden = total - graph.nodes.size;
+
   const prevView = keepView ? viewGetter?.() : undefined; // carry pan/zoom on live updates
   setStatus("Laying out…");
   const positioned = await elkLayout(graph);
@@ -56,10 +66,12 @@ async function renderText(text: string, sourceLabel: string, keepView = false): 
   details.hidden = true;
   stage.classList.add("has-graph");
   lastDumpText = text;
+  lastSourceLabel = sourceLabel;
   shareUrl = null; // a different dump is showing; any cached link no longer applies
   shareBtn.disabled = false;
+  const meterNote = hidden > 0 ? ` (${hidden} meter${hidden === 1 ? "" : "s"} hidden)` : "";
   setStatus(
-    `${graph.nodes.size} nodes · ${graph.ports.size} ports · ${graph.links.length} links — ${sourceLabel}`,
+    `${graph.nodes.size} nodes · ${graph.ports.size} ports · ${graph.links.length} links — ${sourceLabel}${meterNote}`,
   );
 }
 
@@ -86,6 +98,18 @@ stage.addEventListener("drop", async (ev) => {
   stage.classList.remove("drag-over");
   const file = ev.dataTransfer?.files?.[0];
   if (file) await renderText(await file.text(), file.name);
+});
+
+// --- hide-meters toggle ---
+function reflectHideMeters(): void {
+  // Label the action the click performs: "Show meters" while they're hidden.
+  hideMetersBtn.textContent = hideMeters ? "Show meters" : "Hide meters";
+}
+reflectHideMeters(); // match the on-by-default state at load
+hideMetersBtn.addEventListener("click", () => {
+  hideMeters = !hideMeters;
+  reflectHideMeters();
+  if (lastDumpText) void renderText(lastDumpText, lastSourceLabel, true); // keep pan/zoom
 });
 
 // --- paste dialog ---

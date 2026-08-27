@@ -26,6 +26,9 @@ export interface Node {
   name: string; // node.description || node.name || "node <id>"
   mediaClass?: string; // media.class (absent for driver nodes)
   linkGroup?: string; // node.link-group — nodes sharing one are internally linked
+  // A peak-meter / level-monitoring stream (stream.monitor), as opened by audio
+  // managers (pavucontrol, GNOME/KDE sound settings) — noise the viewer can hide.
+  isMeter?: boolean;
   // The format of the wrapped implementation (the stream/device behind the
   // audio/video adapter), from the node's `Format` param — e.g.
   // "S32LE · 48 kHz · 2ch". Distinct from a port's between-nodes format.
@@ -214,6 +217,7 @@ function buildNode(raw: RawObject): Node {
     linkGroup: str(props["node.link-group"]),
     format: formatParam(raw.info),
     filterGraphs: parseFilterGraphs(raw.info),
+    isMeter: props["stream.monitor"] === true,
     ports: [],
     props,
   };
@@ -329,4 +333,30 @@ export function buildGraphFromGroups(groups: RawGroups): Graph {
 /** Convenience: raw parsed JSON (array) → domain graph. */
 export function buildGraph(data: unknown): Graph {
   return buildGraphFromGroups(parseDump(data));
+}
+
+/** A copy of the graph with peak-meter nodes (`isMeter`) and everything attached
+ *  to them removed — their ports, any link touching them, and their slot in link
+ *  groups (a group left with ≤1 member is dropped, matching how groups are built).
+ *  Returns the input unchanged when there are no meters (the common case). */
+export function withoutMeters(g: Graph): Graph {
+  const meters = new Set<number>();
+  for (const node of g.nodes.values()) if (node.isMeter) meters.add(node.id);
+  if (meters.size === 0) return g;
+
+  const nodes = new Map<number, Node>();
+  for (const [id, node] of g.nodes) if (!meters.has(id)) nodes.set(id, node);
+
+  const ports = new Map<number, Port>();
+  for (const [id, port] of g.ports) if (!meters.has(port.nodeId)) ports.set(id, port);
+
+  const links = g.links.filter((l) => !meters.has(l.outNode) && !meters.has(l.inNode));
+
+  const groups: NodeGroup[] = [];
+  for (const grp of g.groups) {
+    const nodeIds = grp.nodeIds.filter((id) => !meters.has(id));
+    if (nodeIds.length > 1) groups.push({ id: grp.id, nodeIds });
+  }
+
+  return { nodes, ports, links, groups };
 }
