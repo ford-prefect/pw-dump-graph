@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Surface a node's internal audio filter graph (`audioconvert.filter-graph`): a `⧉` badge on
   such nodes (click it, or a "View" button in the details panel) opens a left→right drawing of
   the graph's DSP nodes and links in a popup, each node's controls listed in its body
+- Share server stores dumps minified + gzip-compressed (~15× smaller), serving them
+  gzip-encoded to clients that accept it — far more entries fit in the same memory
 
 ## [0.1.0] - 2026-07-30
 

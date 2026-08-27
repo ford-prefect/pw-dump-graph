@@ -53,7 +53,9 @@ A Cargo workspace at the repo root; the frontend (`frontend/`, `dist/`) sits alo
   self-contained binary) and depend on this.
 - **`server/`** (binary `pw-dump-graph-server`) — the **share** service: `POST /api/dumps`
   stores a JSON body in memory under a random key (max-count + TTL, **no persistence,
-  no auth**); `GET /api/dumps/:key` returns it. `just run`/`serve`.
+  no auth**); `GET /api/dumps/:key` returns it. Bodies are stored **minified + gzip-compressed**
+  (`encode`/`decode`) and served with `Content-Encoding: gzip` to clients that accept it, so the
+  `Store` holds compressed `Bytes`. `just run`/`serve`.
 - **`app/`** (binary `pw-dump-graph`) — the **local viewer**. Default is one-shot: gather
   one `pw-dump`, serve `GET /api/graph`, and exit after the UI fetches it (a `Notify`
   fires graceful shutdown). With `-m` it runs `pw-dump -m` on a monitor thread, merges

@@ -55,8 +55,10 @@ detects `/api/graph`, renders it, and — if live — re-fetches on each event. 
 ## Sharing (server)
 
 `server/` is a small Rust (axum) service that stores a posted dump **in memory** under a
-short random key. No persistence: the store is bounded by `PWG_MAX_ENTRIES` (default 500)
-and `PWG_TTL_SECS` (default 24 h), and everything is lost on restart.
+short random key. Dumps are held **minified and gzip-compressed** (~15× smaller for typical
+`pw-dump` output) and served back gzip-encoded to clients that accept it, so far more entries
+fit in a given memory budget. No persistence: the store is bounded by `PWG_MAX_ENTRIES`
+(default 500) and `PWG_TTL_SECS` (default 24 h), and everything is lost on restart.
 
 Built with the `embed` feature it bakes the frontend into the binary, so the whole app is
 **one self-contained executable** — no `dist/` to ship alongside:
