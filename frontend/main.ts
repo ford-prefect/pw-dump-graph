@@ -54,7 +54,11 @@ async function renderText(text: string, sourceLabel: string, keepView = false): 
     setStatus(`Failed to parse ${sourceLabel}: ${(err as Error).message}`, true);
     return;
   }
+  // Only offer the meters toggle when this graph actually has any (checked on the
+  // unfiltered graph, so it stays visible regardless of the toggle's state).
   const total = graph.nodes.size;
+  const hasMeters = [...graph.nodes.values()].some((n) => n.isMeter);
+  hideMetersBtn.hidden = !hasMeters;
   if (hideMeters) graph = withoutMeters(graph);
   const hidden = total - graph.nodes.size;
 
