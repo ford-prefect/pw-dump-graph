@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the graph's DSP nodes and links in a popup, each node's controls listed in its body
 - Share server stores dumps minified + gzip-compressed (~15× smaller), serving them
   gzip-encoded to clients that accept it — far more entries fit in the same memory
-- Add a "Hide meters" toggle (on by default) that hides audio-manager peak-meter streams
-  (`stream.monitor`, e.g. pavucontrol / GNOME / KDE sound settings) to de-noise the graph
+- Add a "Hide meters" toggle (on by default, shown only when the graph has any) that hides
+  audio-manager peak-meter streams (`stream.monitor`, e.g. pavucontrol / GNOME / KDE sound
+  settings) to de-noise the graph
 
 ## [0.1.0] - 2026-07-30
 
