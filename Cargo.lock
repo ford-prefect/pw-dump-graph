@@ -420,7 +420,7 @@ dependencies = [
 
 [[package]]
 name = "pw-dump-graph"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-stream",
  "axum",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "pw-dump-graph-common"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "mime_guess",
@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "pw-dump-graph-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "flate2",

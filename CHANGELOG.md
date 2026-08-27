@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-27
+
+### Added
+
 - Add `pw-dump-graph -r` as an alternative to `--remote`
 - Surface a node's internal audio filter graph (`audioconvert.filter-graph`): a `⧉` badge on
   such nodes (click it, or a "View" button in the details panel) opens a left→right drawing of
@@ -44,4 +48,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prebuilt `x86_64` and `aarch64` Linux (glibc) release binaries via `dist`.
 
 [Unreleased]: https://github.com/ford-prefect/pw-dump-graph/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/ford-prefect/pw-dump-graph/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ford-prefect/pw-dump-graph/releases/tag/v0.1.0
