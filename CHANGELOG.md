@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a "Hide meters" toggle (on by default, shown only when the graph has any) that hides
   audio-manager peak-meter streams (`stream.monitor`, e.g. pavucontrol / GNOME / KDE sound
   settings) to de-noise the graph
+- Share server can hand its store off across a restart via `PWG_STATE_FILE` (written on
+  graceful shutdown, read back and deleted on start) — a transient handoff for deploys, not
+  durable storage: nothing stays on disk while running and a hard kill keeps nothing
 
 ## [0.1.0] - 2026-07-30
 

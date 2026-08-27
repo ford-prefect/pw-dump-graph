@@ -60,6 +60,13 @@ short random key. Dumps are held **minified and gzip-compressed** (~15× smaller
 fit in a given memory budget. No persistence: the store is bounded by `PWG_MAX_ENTRIES`
 (default 500) and `PWG_TTL_SECS` (default 24 h), and everything is lost on restart.
 
+Optionally, set `PWG_STATE_FILE=<path>` to hand the store off **across a restart** (e.g. when
+deploying a new binary): the store is written there once on graceful shutdown (SIGTERM/Ctrl-C)
+and read back — **then deleted** — on the next start. This is a transient handoff, **not**
+durable storage: nothing sits on disk while the server runs, and a hard kill (SIGKILL) writes
+nothing (that share is lost). The file is written `0600`; point it at a per-service location
+(a systemd `StateDirectory`, a Docker volume) so a restart reloads it.
+
 Built with the `embed` feature it bakes the frontend into the binary, so the whole app is
 **one self-contained executable** — no `dist/` to ship alongside:
 
@@ -90,7 +97,7 @@ Endpoints: `POST`/`PUT /` (piped dump) → the share URL as text; `POST /api/dum
 same as JSON `{key,url}` (used by the Share button); `GET /api/dumps/:key` → the stored
 JSON (`404` if evicted). Bodies must be JSON (`400` otherwise) and under `PWG_BODY_LIMIT`
 (`413`, default 8 MiB).
-Config via env: `PWG_ADDR`, `PWG_MAX_ENTRIES`, `PWG_TTL_SECS`, `PWG_BODY_LIMIT`.
+Config via env: `PWG_ADDR`, `PWG_MAX_ENTRIES`, `PWG_TTL_SECS`, `PWG_BODY_LIMIT`, `PWG_STATE_FILE`.
 `npm run dev` proxies `/api` to `localhost:8787`, so the Share button works in dev too.
 
 ## Releases
