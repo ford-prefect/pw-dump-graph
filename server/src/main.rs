@@ -4,9 +4,16 @@
 //! hands the key back so the frontend can load the graph via `/?g=<key>`. Nothing is
 //! persisted: the store is bounded by a max entry count and a TTL, and everything is
 //! lost on restart. The same binary also serves the built frontend (`dist/`).
+//!
+//! Dumps are stored **minified and gzip-compressed** (pw-dump JSON is pretty-printed
+//! and highly repetitive, ~15× here), so far more entries fit in a given memory budget.
+//! `GET` serves the stored gzip bytes verbatim with `Content-Encoding: gzip` to clients
+//! that accept it (browsers do — the frontend's `fetch`/`res.text()` decodes it
+//! transparently), decompressing server-side only for the rare client that doesn't.
 
 use std::{
     collections::{HashMap, VecDeque},
+    io::{Read, Write},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -14,17 +21,21 @@ use std::{
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
-    http::{header::CONTENT_TYPE, HeaderMap, StatusCode},
+    http::{
+        header::{CONTENT_ENCODING, CONTENT_TYPE},
+        HeaderMap, StatusCode,
+    },
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use pw_dump_graph_common::frontend;
 use rand::{distributions::Alphanumeric, Rng};
 
-/// One stored dump plus when it was created (for TTL).
+/// One stored dump (minified + gzip-compressed) plus when it was created (for TTL).
 struct Entry {
-    bytes: Bytes,
+    gz: Bytes,
     created: Instant,
 }
 
@@ -72,14 +83,8 @@ impl Store {
         }
     }
 
-    fn insert(&mut self, key: String, bytes: Bytes, now: Instant) {
-        self.map.insert(
-            key.clone(),
-            Entry {
-                bytes,
-                created: now,
-            },
-        );
+    fn insert(&mut self, key: String, gz: Bytes, now: Instant) {
+        self.map.insert(key.clone(), Entry { gz, created: now });
         self.order.push_back(key);
         self.evict(now);
     }
@@ -90,7 +95,7 @@ impl Store {
                 self.map.remove(key); // lazily expire on read
                 None
             }
-            Some(e) => Some(e.bytes.clone()),
+            Some(e) => Some(e.gz.clone()),
             None => None,
         }
     }
@@ -108,16 +113,31 @@ fn gen_key() -> String {
         .collect()
 }
 
+/// Validate, minify, and gzip a dump body for storage. `None` if it isn't JSON.
+fn encode(body: &[u8]) -> Option<Bytes> {
+    let value: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let minified = serde_json::to_vec(&value).ok()?; // drop pretty-print whitespace
+    let mut enc = GzEncoder::new(Vec::new(), Compression::best());
+    enc.write_all(&minified).ok()?;
+    Some(Bytes::from(enc.finish().ok()?))
+}
+
+/// Inflate a stored (gzip) entry back to JSON bytes, for clients that don't accept gzip.
+fn decode(gz: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    // Infallible in practice — we only ever store what `encode` produced.
+    let _ = GzDecoder::new(gz).read_to_end(&mut out);
+    out
+}
+
 /// Validate + store a dump, returning its key (None if the body isn't JSON).
 fn store_dump(store: &Shared, body: Bytes) -> Option<String> {
-    if serde_json::from_slice::<serde_json::Value>(&body).is_err() {
-        return None;
-    }
+    let gz = encode(&body)?;
     let key = gen_key();
     store
         .lock()
         .unwrap()
-        .insert(key.clone(), body, Instant::now());
+        .insert(key.clone(), gz, Instant::now());
     Some(key)
 }
 
@@ -156,10 +176,33 @@ async fn create_text(State(store): State<Shared>, headers: HeaderMap, body: Byte
     }
 }
 
-async fn fetch(State(store): State<Shared>, Path(key): Path<String>) -> impl IntoResponse {
-    match store.lock().unwrap().get(&key, Instant::now()) {
-        Some(bytes) => ([(CONTENT_TYPE, "application/json")], bytes).into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
+fn accepts_gzip(headers: &HeaderMap) -> bool {
+    headers
+        .get("accept-encoding")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.to_ascii_lowercase().contains("gzip"))
+}
+
+async fn fetch(
+    State(store): State<Shared>,
+    headers: HeaderMap,
+    Path(key): Path<String>,
+) -> impl IntoResponse {
+    let Some(gz) = store.lock().unwrap().get(&key, Instant::now()) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if accepts_gzip(&headers) {
+        // Serve the stored bytes as-is — the client (browser) inflates them.
+        (
+            [
+                (CONTENT_TYPE, "application/json"),
+                (CONTENT_ENCODING, "gzip"),
+            ],
+            gz,
+        )
+            .into_response()
+    } else {
+        ([(CONTENT_TYPE, "application/json")], decode(&gz)).into_response()
     }
 }
 
@@ -232,5 +275,37 @@ mod tests {
         s.insert("b".into(), bytes("2"), t0 + Duration::from_secs(20));
         assert_eq!(s.map.len(), 1);
         assert!(s.map.contains_key("b"));
+    }
+
+    #[test]
+    fn encode_minifies_and_roundtrips() {
+        let pretty = b"[\n  { \"a\": 1, \"b\": [2, 3] }\n]";
+        let gz = encode(pretty).expect("valid JSON encodes");
+        assert_eq!(decode(&gz), br#"[{"a":1,"b":[2,3]}]"#); // whitespace dropped
+    }
+
+    #[test]
+    fn encode_rejects_non_json() {
+        assert!(encode(b"not json").is_none());
+        assert!(encode(b"").is_none());
+    }
+
+    #[test]
+    fn encode_shrinks_repetitive_json() {
+        // A repetitive array compresses well below its source size.
+        let big = format!("[{}]", vec![r#"{"node":"x","ok":true}"#; 500].join(",\n  "));
+        let gz = encode(big.as_bytes()).expect("valid JSON");
+        assert!(
+            gz.len() * 10 < big.len(),
+            "expected >10x: {} vs {}",
+            gz.len(),
+            big.len()
+        );
+        assert_eq!(
+            decode(&gz).len(),
+            serde_json::to_vec(&serde_json::from_str::<serde_json::Value>(&big).unwrap())
+                .unwrap()
+                .len()
+        );
     }
 }
