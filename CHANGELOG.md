@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Docs restructured by audience: `README.md` now leads with the hosted one-liner
+  (`pw-dump | curl -sT- https://pw.arunraghavan.net`) and the prebuilt local binary,
+  operating the share service moved to `server/README.md`, and architecture, data-model
+  notes and the release process moved to a new `DEVELOPMENT.md`.
+
 ### Added
 
 - Reference systemd unit for the share server in `contrib/pw-dump-graph-server.service`:
