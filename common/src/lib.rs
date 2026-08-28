@@ -14,9 +14,20 @@ use axum::{
 #[folder = "../dist/"]
 struct Assets;
 
+/// The SPA fallback must not shadow the API namespace. An unmatched `/api/…` is a missing
+/// endpoint, not a client-side route, and answering it with index.html yields a 200 full of
+/// HTML that a JSON caller reads as a real response — which is how a share server (no
+/// `/api/graph`) used to look like a live viewer to the frontend.
+fn is_api_path(path: &str) -> bool {
+    path == "/api" || path.starts_with("/api/")
+}
+
 /// Serve the embedded frontend, with SPA fallback to index.html so `/?g=…` works.
 #[cfg(feature = "embed")]
 pub async fn frontend(uri: Uri) -> Response {
+    if is_api_path(uri.path()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let path = uri.path().trim_start_matches('/');
     let path = if path.is_empty() { "index.html" } else { path };
     if let Some(file) = Assets::get(path) {
@@ -34,6 +45,9 @@ pub async fn frontend(uri: Uri) -> Response {
 /// `npm run build` has run. Falls back to a hint if the frontend isn't built.
 #[cfg(not(feature = "embed"))]
 pub async fn frontend(uri: Uri) -> Response {
+    if is_api_path(uri.path()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let dist = std::env::var("PWG_DIST").unwrap_or_else(|_| "dist".to_string());
     let base = std::path::Path::new(&dist);
     let rel = uri.path().trim_start_matches('/');
@@ -52,5 +66,22 @@ pub async fn frontend(uri: Uri) -> Response {
             "frontend not found — run `npm run build` (PWG_DIST), or build with `--features embed`",
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_api_path;
+
+    #[test]
+    fn api_namespace_is_not_spa_routable() {
+        assert!(is_api_path("/api"));
+        assert!(is_api_path("/api/"));
+        assert!(is_api_path("/api/graph"));
+        assert!(is_api_path("/api/dumps/abc"));
+        // Not the API namespace — these are ordinary SPA/asset paths.
+        assert!(!is_api_path("/"));
+        assert!(!is_api_path("/apiary"));
+        assert!(!is_api_path("/pw-dump.json"));
     }
 }
