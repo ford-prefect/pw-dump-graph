@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reference systemd unit for the share server in `contrib/pw-dump-graph-server.service`:
+  a hardened `DynamicUser=yes` service that keeps the `PWG_STATE_FILE` restart handoff in a
+  `StateDirectory`, which is what makes the handoff survive a restart at all — `DynamicUser=yes`
+  implies `PrivateTmp=yes`, so a `/tmp` handoff is destroyed with the unit's private `/tmp`.
+
 ## [0.2.0] - 2026-08-27
 
 ### Added
