@@ -4,53 +4,62 @@ Render [`pw-dump`](https://docs.pipewire.org/page_man_pw-dump_1.html) output as 
 interactive PipeWire **patchbay** graph in the browser — nodes as boxes with
 individual input/output port stubs, links routed port-to-port (like qpwgraph/helvum).
 
-## Quick start
+## Share a dump
+
+Pipe `pw-dump` at a hosted instance and get a link back:
+
+```bash
+pw-dump | curl -sT- https://pw.arunraghavan.net
+# → https://pw.arunraghavan.net/?g=kAvgEynPkG
+```
+
+Open the link to see the graph — nothing to install on either end, which makes this the
+easy way to get a graph in front of someone else (a bug report, a colleague, IRC).
+
+`curl` needs an upload flag to read stdin: `-T-` PUTs it, `--data-binary @-` POSTs it. A
+bare `curl <url>` ignores the pipe and just fetches the page.
+
+You can also open <https://pw.arunraghavan.net> directly and load a dump with **Open
+file…**, by dragging a `pw-dump.json` onto the canvas, or with **Paste JSON…**. The
+**Share…** button uploads whatever is on screen and copies the link.
+
+Anyone with the link can view that dump, and links expire after a while — treat it as a
+pastebin, not storage.
+
+## View your own graph
+
+`pw-dump-graph` runs `pw-dump` on the machine and serves the viewer to your browser. It's
+one self-contained binary with the frontend baked in — grab the tarball for your
+architecture from the
+[Releases](https://github.com/ford-prefect/pw-dump-graph/releases) page and run it:
+
+```bash
+./pw-dump-graph               # gather one dump, open a browser, exit once the page loads
+./pw-dump-graph -m            # live: stream `pw-dump -m`, update the page as things change
+./pw-dump-graph -r -m         # bind 0.0.0.0, no browser — run on a device, view from another host
+```
+
+Nothing is stored or uploaded; it reads the local graph and serves it to you. `-p`/`--port`
+(or `PWG_PORT`) changes the port.
+
+Interactions: scroll to zoom, drag to pan, hover a node to highlight its links and
+neighbours, click a node for a details panel (properties, ports, formats). Nodes sharing a
+`node.link-group` — filter chains, loopbacks, echo-cancel — are drawn inside a labelled
+box, laid out `source → filter → sink`. A node whose internal `audioconvert.filter-graph`
+is loaded gets a `⧉` badge that opens a drawing of that graph.
+
+If you just want to look at a dump you already have, any instance of the viewer will do:
+drop the file on <https://pw.arunraghavan.net>, or run it from source below.
+
+## Running from source
 
 ```bash
 npm install
-npm run dev        # open the printed http://localhost:5173/
+just app          # one-shot local viewer
+just app-monitor  # live local viewer
+just app-remote   # live, bind 0.0.0.0, no browser
+just bin-app      # build the self-contained binary → target/release/pw-dump-graph
 ```
-
-On load it renders the bundled sample (`examples/pw-dump.json`). To view your own graph:
-
-- **Open file…** or drag a `pw-dump.json` onto the canvas, or
-- **Paste JSON…** and paste the output of `pw-dump`, or
-- pass a URL: `http://localhost:5173/?url=/path-or-href-to.json`
-
-Generate a dump on a PipeWire host with:
-
-```bash
-pw-dump > pw-dump.json
-```
-
-Interactions: scroll to zoom, drag to pan, hover a node to highlight its links and
-neighbours, click a node for a details panel (properties, ports, formats).
-
-```bash
-npm run build      # static site -> dist/
-npm run typecheck  # tsc --noEmit
-```
-
-## Local viewer (`pw-dump-graph`)
-
-`app/` is a standalone Rust binary that runs `pw-dump` on the machine and serves the
-viewer. By default it's **one-shot**: gather a single dump, open the browser, and exit
-once the page has loaded it. With **`-m`** it runs `pw-dump -m` and streams live updates
-(SSE), refreshing the page as the graph changes. No storage/sharing.
-
-```bash
-just app          # one-shot: gather a dump on 127.0.0.1:8787, open a browser, exit after it loads
-just app-monitor  # live: stream pw-dump -m and update the page as things change
-just app-remote   # live + bind 0.0.0.0, no browser — run on a device, view from another host
-just bin-app      # single self-contained binary → target/release/pw-dump-graph
-```
-
-Endpoints: `GET /api/graph` (current objects; `x-pwg-live: 1` in monitor mode) and, when
-monitoring, `GET /api/events` (debounced SSE tick on change). Monitor mode merges each
-batch by top-level `id` (replace on update, remove on `info`/`props` null); the frontend
-detects `/api/graph`, renders it, and — if live — re-fetches on each event. Flags/env:
-`-m`/`--monitor`, `--remote`, `--port`/`PWG_PORT`, `PWG_ADDR`, `PWG_DIST`, and
-`PWG_DUMP_CMD` (overrides the source command; handy for a pipeline or a test capture).
 
 ## Sharing (server)
 
@@ -64,10 +73,5 @@ handoff, and running it under systemd behind a reverse proxy.
 ## Development
 
 Build instructions, architecture, data-model notes and the release process are in
-[DEVELOPMENT.md](DEVELOPMENT.md).
-
-## Deferred (not yet implemented)
-
-- **Port groups (n:1):** cluster ports by `Port.group` in the renderer / elk.
-- **Server durability/limits:** the share service is in-memory only (no persistence,
-  auth, rate limiting, or TLS — put it behind a reverse proxy if exposed).
+[DEVELOPMENT.md](DEVELOPMENT.md). Release history is in
+[CHANGELOG.md](CHANGELOG.md). Licensed under the terms in [LICENSE](LICENSE).
