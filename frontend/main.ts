@@ -46,13 +46,15 @@ function setStatus(msg: string, error = false): void {
 // Getter for the current pan/zoom, so a live re-render can keep the viewport steady.
 let viewGetter: (() => View) | undefined;
 
-async function renderText(text: string, sourceLabel: string, keepView = false): Promise<void> {
+// Returns whether it actually rendered, so a caller probing an endpoint (tryLoadLive)
+// can tell a real graph from a body that didn't parse.
+async function renderText(text: string, sourceLabel: string, keepView = false): Promise<boolean> {
   let graph: Graph;
   try {
     graph = buildGraph(JSON.parse(text));
   } catch (err) {
     setStatus(`Failed to parse ${sourceLabel}: ${(err as Error).message}`, true);
-    return;
+    return false;
   }
   // Only offer the meters toggle when this graph actually has any (checked on the
   // unfiltered graph, so it stays visible regardless of the toggle's state).
@@ -77,6 +79,7 @@ async function renderText(text: string, sourceLabel: string, keepView = false): 
   setStatus(
     `${graph.nodes.size} nodes · ${graph.ports.size} ports · ${graph.links.length} links — ${sourceLabel}${meterNote}`,
   );
+  return true;
 }
 
 async function loadFromUrl(url: string): Promise<void> {
@@ -167,10 +170,14 @@ async function tryLoadLive(): Promise<boolean> {
   try {
     const res = await fetch("/api/graph");
     if (!res.ok) return false;
+    // The share server has no /api/graph — only the local viewer serves it. Require JSON
+    // and an actual render before claiming this is a live source, so a fallback that
+    // answers 200 with index.html doesn't shadow the bundled sample below.
+    if (!res.headers.get("content-type")?.startsWith("application/json")) return false;
     // The app sets x-pwg-live: 1 in monitor mode; one-shot mode omits live updates
     // (and the server exits after this fetch), so only subscribe when it's live.
     const live = res.headers.get("x-pwg-live") === "1";
-    await renderText(await res.text(), live ? "live (pw-dump -m)" : "pw-dump");
+    if (!(await renderText(await res.text(), live ? "live (pw-dump -m)" : "pw-dump"))) return false;
     if (live) startLive();
     return true;
   } catch {
