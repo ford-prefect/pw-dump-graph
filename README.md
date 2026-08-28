@@ -67,6 +67,12 @@ durable storage: nothing sits on disk while the server runs, and a hard kill (SI
 nothing (that share is lost). The file is written `0600`; point it at a per-service location
 (a systemd `StateDirectory`, a Docker volume) so a restart reloads it.
 
+`contrib/pw-dump-graph-server.service` is a reference systemd unit wiring this up — a hardened
+`DynamicUser=yes` service with the handoff in a `StateDirectory`. Under systemd that pairing is
+the only one that works: `DynamicUser=yes` implies `PrivateTmp=yes`, so a `/tmp` handoff is
+written into a per-start private `/tmp` that is destroyed when the unit stops, and the restore
+silently comes up empty.
+
 Built with the `embed` feature it bakes the frontend into the binary, so the whole app is
 **one self-contained executable** — no `dist/` to ship alongside:
 

@@ -58,7 +58,9 @@ A Cargo workspace at the repo root; the frontend (`frontend/`, `dist/`) sits alo
   `Store` holds compressed `Bytes`. Optional `PWG_STATE_FILE` is a **transient restart handoff,
   not persistence**: `snapshot`/`from_snapshot` write the store on graceful shutdown
   (SIGTERM/Ctrl-C) and load-then-**delete** it on start, so nothing lingers on disk while running
-  (a hard kill writes nothing). `just run`/`serve`.
+  (a hard kill writes nothing). `just run`/`serve`. Deployment glue for it lives in `contrib/`
+  (currently a reference systemd unit) — not `dist/`, which is a Vite build output `just clean`
+  removes, nor `examples/`, which Vite bundles into `dist/` and hence into the binary.
 - **`app/`** (binary `pw-dump-graph`) — the **local viewer**. Default is one-shot: gather
   one `pw-dump`, serve `GET /api/graph`, and exit after the UI fetches it (a `Notify`
   fires graceful shutdown). With `-m` it runs `pw-dump -m` on a monitor thread, merges

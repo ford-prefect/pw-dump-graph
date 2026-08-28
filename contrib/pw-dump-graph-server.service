@@ -1,0 +1,80 @@
+# Reference unit for the pw-dump-graph share server. Not installed by anything —
+# copy it, adjust, and treat it as a starting point:
+#
+#   just bin
+#   sudo install -m755 target/release/pw-dump-graph-server /usr/local/bin/
+#   sudo install -m644 contrib/pw-dump-graph-server.service /etc/systemd/system/
+#   sudo systemctl enable --now pw-dump-graph-server
+#
+# Tune with a drop-in (`systemctl edit pw-dump-graph-server`) or by writing
+# PWG_* assignments into /etc/default/pw-dump-graph-server, rather than editing
+# this file. Every knob is listed in README.md ("Sharing (server)").
+
+[Unit]
+Description=pw-dump-graph share server
+Documentation=https://github.com/ford-prefect/pw-dump-graph
+After=network.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/pw-dump-graph-server
+Restart=always
+RestartSec=2
+
+# The binary's own defaults apply unless overridden here. PWG_ADDR defaults to
+# 0.0.0.0:8787; this unit narrows it to loopback, on the assumption that a
+# reverse proxy fronts it (see IPAddressDeny= below before changing that).
+Environment=PWG_ADDR=127.0.0.1:8787
+EnvironmentFile=-/etc/default/pw-dump-graph-server
+
+# Transient restart handoff, so shares survive a redeploy. StateDirectory= is
+# load-bearing, not just tidier: DynamicUser=yes silently implies both
+# ProtectSystem=strict (making /var/lib read-only without it) and PrivateTmp=yes
+# — so a /tmp path would be written into a per-start private /tmp that systemd
+# destroys when the unit stops, and the handoff would vanish with no error at
+# all. systemd keeps this directory across restarts and reboots, owned by the
+# transient user.
+StateDirectory=pw-dump-graph
+Environment=PWG_STATE_FILE=/var/lib/pw-dump-graph/handoff
+
+# The store is in memory and bounded by PWG_MAX_ENTRIES x PWG_BODY_LIMIT, and
+# `snapshot()` builds the whole handoff blob in memory before writing it. If you
+# raise PWG_MAX_ENTRIES much, cap the service so it fails visibly instead of
+# taking the host down, and check the write finishes inside the stop timeout.
+#MemoryMax=1G
+
+DynamicUser=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectClock=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+# AF_UNIX is needed for name resolution (and syslog); AF_INET/AF_INET6 for the
+# listener itself. A literal PWG_ADDR works without it, a hostname does not.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+UMask=0077
+# Matches the loopback PWG_ADDR above: only local clients (a reverse proxy on
+# this host) can reach it. Relax or drop both if you bind a public address.
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target
