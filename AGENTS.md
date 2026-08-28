@@ -4,8 +4,13 @@ Guidance for AI agents (and humans) working in this repo.
 
 ## What this is
 
-A static, browser-based viewer that renders `pw-dump` (PipeWire) output as an
-interactive patchbay graph. No backend yet. See `README.md` for usage.
+A browser-based viewer that renders `pw-dump` (PipeWire) output as an interactive
+patchbay graph, plus two Rust binaries that serve it — `app/` (local viewer) and
+`server/` (keyed share service).
+
+Docs split by audience: `README.md` is user-facing usage, `DEVELOPMENT.md` has the
+architecture, data model and release process, `server/README.md` covers operating the
+share service. This file holds the rules an agent needs and shouldn't restate them.
 
 ## Architecture invariant (do not break)
 
