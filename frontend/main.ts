@@ -1,6 +1,6 @@
 // Entry point — wiring only.
 // Pipeline: text -> JSON.parse -> buildGraph -> elkLayout -> renderGraph -> attachInteractions.
-// Data source precedence: ?url= -> dropped/selected file -> pasted JSON -> bundled sample.
+// Data source precedence: ?g= -> ?url= -> live /api/graph -> dropped/selected file / pasted JSON.
 
 import "./styles.css";
 import { buildGraph, withoutMeters, type Graph } from "./model.js";
@@ -171,8 +171,8 @@ async function tryLoadLive(): Promise<boolean> {
     const res = await fetch("/api/graph");
     if (!res.ok) return false;
     // The share server has no /api/graph — only the local viewer serves it. Require JSON
-    // and an actual render before claiming this is a live source, so a fallback that
-    // answers 200 with index.html doesn't shadow the bundled sample below.
+    // and an actual render before claiming this is a live source, so static hosting that
+    // answers 200 with index.html falls through to the empty state instead.
     if (!res.headers.get("content-type")?.startsWith("application/json")) return false;
     // The app sets x-pwg-live: 1 in monitor mode; one-shot mode omits live updates
     // (and the server exits after this fetch), so only subscribe when it's live.
@@ -204,7 +204,7 @@ function startLive(): void {
 }
 
 // --- initial load ---
-// Precedence: ?g=<key> (server-stored dump) → ?url=<href> → live /api/graph → sample.
+// Precedence: ?g=<key> (server-stored dump) → ?url=<href> → live /api/graph → empty state.
 (async () => {
   const params = new URLSearchParams(location.search);
   const key = params.get("g");
@@ -218,8 +218,8 @@ function startLive(): void {
     } else if (await tryLoadLive()) {
       // served by the local viewer — graph loaded from /api/graph
     } else {
-      // bundled sample (served from examples/ via Vite publicDir)
-      await loadFromUrl("/pw-dump.json");
+      // No source: leave the dropzone hint showing and invite a dump.
+      setStatus("Open, drop, or paste a pw-dump JSON to begin.");
     }
   } catch (err) {
     setStatus(`No graph loaded (${(err as Error).message}). Drop or paste a pw-dump JSON.`, true);

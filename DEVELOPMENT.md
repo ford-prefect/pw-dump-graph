@@ -13,9 +13,9 @@ npm run build      # static site → dist/
 npm run typecheck  # tsc --noEmit
 ```
 
-`npm run dev` renders the bundled sample (`examples/pw-dump.json`) on load. To view
-another graph, use **Open file…**, drag a `pw-dump.json` onto the canvas, **Paste JSON…**,
-or pass `?url=/path-or-href-to.json`.
+`npm run dev` opens to an empty canvas. Load a graph with **Open file…**, by dragging a
+`pw-dump.json` onto the canvas, **Paste JSON…**, or by passing `?url=/path-or-href-to.json`
+(e.g. one of the dumps under `fixtures/`).
 
 `npm run dev` also proxies `/api` to `localhost:8787`, so the **Share…** button and `?g=`
 links work against a locally running share server (`just serve`).

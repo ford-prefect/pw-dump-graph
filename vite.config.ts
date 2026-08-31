@@ -1,10 +1,10 @@
 import { defineConfig } from "vite";
 
-// Static SPA. The bundled sample under examples/ is served as a static asset
-// so the viewer has something to render on first load.
+// Static SPA. No static assets to copy — the viewer starts empty and loads a dump
+// from a share key, a URL, the local live viewer, or an opened/dropped/pasted file.
 export default defineConfig({
   root: ".",
-  publicDir: "examples",
+  publicDir: false,
   build: {
     outDir: "dist",
     emptyOutDir: true,

@@ -39,7 +39,7 @@ parse → model → layout adapter → PositionedGraph → render
 ## Commands
 
 ```bash
-npm run dev        # dev server (renders examples/pw-dump.json by default)
+npm run dev        # dev server (opens to an empty canvas — load a dump to view)
 npm run build      # tsc + vite build → dist/
 npm run typecheck  # tsc --noEmit
 
@@ -115,10 +115,13 @@ in `[workspace.metadata.dist]` (root `Cargo.toml`) + `app/[package.metadata.dist
   loopbacks, echo-cancel) render inside a labelled box, laid out `source → filter → sink`.
 - Prefer verifying model/layout changes headlessly (they are DOM-free); render/interact
   need a DOM.
-- Test dumps that shouldn't ship live in `fixtures/` (NOT `examples/`, which is Vite's
-  `publicDir` and gets bundled into `dist/` + embedded in the binary). `examples/` holds only
-  the one bundled sample (`pw-dump.json`). E.g. `fixtures/pw-node-audioconvert-graph.json` is a
-  dump with a loaded `audioconvert.filter-graph` for exercising the internal-filter-graph view.
+- Test dumps live in `fixtures/`. Nothing is bundled into `dist/` or the binary — Vite's
+  `publicDir` is disabled and the viewer starts empty — so `fixtures/` is dev/test-only. Load
+  one via `?url=/fixtures/<name>` in dev, or drag/paste it. Current fixtures:
+  `pw-dump.json` (a plain full-desktop dump — the former bundled sample),
+  `pw-dump-pavucontrol.json` (has `stream.monitor` peak meters, for the Hide-meters filter), and
+  `pw-node-audioconvert-graph.json` (a loaded `audioconvert.filter-graph`, for the internal
+  filter-graph view).
 
 ## Commits
 
