@@ -14,13 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Opening a share server's URL without a `?g=` key showed "Failed to parse pw-dump"
-  instead of the bundled sample graph. The SPA fallback answered `/api/graph` with
+  instead of the empty viewer. The SPA fallback answered `/api/graph` with
   index.html, so the frontend's live-viewer probe accepted a 200 full of HTML as a live
   source. Unmatched `/api/…` paths now return `404`, and the probe requires JSON and a
   successful render before treating a response as live.
 
 ### Changed
 
+- Dropped the bundled sample dump: the viewer now opens to an empty canvas prompting you to
+  open/drop/paste a dump (or arrive via `?g=`/`?url=`/the local live viewer), instead of
+  rendering a built-in graph that some users mistook for their own.
 - Docs restructured by audience: `README.md` now leads with the hosted one-liner
   (`pw-dump | curl -sT- https://pw.arunraghavan.net`) and the prebuilt local binary,
   operating the share service moved to `server/README.md`, and architecture, data-model
