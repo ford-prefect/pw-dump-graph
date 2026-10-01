@@ -11,6 +11,7 @@ npm install
 npm run dev        # dev server with hot reload → http://localhost:5173/
 npm run build      # static site → dist/
 npm run typecheck  # tsc --noEmit
+npm test           # layout smoke: lays out every fixtures/*.json (scripts/smoke.ts)
 ```
 
 `npm run dev` opens to an empty canvas. Load a graph with **Open file…**, by dragging a

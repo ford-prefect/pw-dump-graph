@@ -42,6 +42,7 @@ parse → model → layout adapter → PositionedGraph → render
 npm run dev        # dev server (opens to an empty canvas — load a dump to view)
 npm run build      # tsc + vite build → dist/
 npm run typecheck  # tsc --noEmit
+npm test           # layout smoke: parse→model→layout every fixtures/*.json (scripts/smoke.ts)
 
 # Rust workspace (common + server + app)
 cargo test         # workspace tests (share store eviction/TTL, live-merge)
@@ -109,7 +110,10 @@ in `[workspace.metadata.dist]` (root `Cargo.toml`) + `app/[package.metadata.dist
 
 ## Verifying changes
 
-- `npm run typecheck` and `npm run build` must pass.
+- `npm run typecheck`, `npm test`, and `npm run build` must pass (all three run in CI).
+  `npm test` runs `scripts/smoke.ts` via tsx: it builds the model and lays out every
+  `fixtures/*.json`, asserting nothing throws and every node is placed — so a new fixture
+  is also a new regression case (drop a dump that broke something into `fixtures/`).
 - Sanity-check against a real `pw-dump`: nodes render as boxes with input ports on the
   left / output ports on the right; nodes sharing a `node.link-group` (filter chains,
   loopbacks, echo-cancel) render inside a labelled box, laid out `source → filter → sink`.
