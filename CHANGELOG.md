@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A dump containing a suspended filter-chain/echo-cancel node (zero ports but part of a
+  `node.link-group`) failed to render at all — ELK rejected the group's internal ordering
+  edge to a node it had been told to skip. Such grouped nodes are now laid out as header-only
+  boxes inside their group instead of being excluded.
 - Opening a share server's URL without a `?g=` key showed "Failed to parse pw-dump"
   instead of the empty viewer. The SPA fallback answered `/api/graph` with
   index.html, so the frontend's live-viewer probe accepted a 200 full of HTML as a live
