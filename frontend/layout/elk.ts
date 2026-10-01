@@ -155,20 +155,24 @@ export const elkLayout: LayoutEngine = async (graph: Graph): Promise<PositionedG
   // container.
   const consumers = new Set(graph.links.map((l) => l.inNode));
   const isSource = (n: Node) => !consumers.has(n.id) && n.ports.some((p) => p.direction === "out");
-  // Portless nodes (Dummy/Freewheel drivers) carry no signal flow and no edges, so
-  // elk gains nothing from them and its component packer just interleaves them with
-  // the real sources. Keep them out of the layout entirely and stack them in a
-  // corner afterwards (see below).
+  // Ungrouped portless nodes (Dummy/Freewheel drivers) carry no signal flow and no
+  // edges, so elk gains nothing from them and its component packer just interleaves
+  // them with the real sources. Keep those out of the layout entirely and stack them
+  // in a corner afterwards (see below). A portless node that IS in a group, though,
+  // must stay in — its container box and the lane-pairing hint edges below reference
+  // it by `n<id>`, and elk rejects an edge to a shape it was never given. (A filter-chain
+  // or echo-cancel member can have zero ports while suspended — it instantiates them on
+  // activation — so a grouped node being portless is normal, not a reason to exile it.)
   const floaterNodes: Node[] = [];
 
   const children: ElkNode[] = [];
   for (const node of graph.nodes.values()) {
-    if (node.ports.length === 0) {
+    const gid = groupOf.get(node.id);
+    if (node.ports.length === 0 && !gid) {
       floaterNodes.push(node);
       continue;
     }
     const elkNode = makeNode(node);
-    const gid = groupOf.get(node.id);
     const container = gid ? containers.get(gid) : undefined;
     if (container) {
       container.children!.push(elkNode);
