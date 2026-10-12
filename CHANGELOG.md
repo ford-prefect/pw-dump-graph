@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Both binaries report what's running at `GET /api/version` (`{service, version, commit}`),
+  and the frontend bakes the same version and commit at build time. A **Help** button
+  opens a dialog showing both, a link to the source, and what to expect of persistence
+  for the backend in use (share server, local viewer, or none).
 - Reference systemd unit for the share server in `contrib/pw-dump-graph-server.service`:
   a hardened `DynamicUser=yes` service that keeps the `PWG_STATE_FILE` restart handoff in a
   `StateDirectory`, which is what makes the handoff survive a restart at all — `DynamicUser=yes`
