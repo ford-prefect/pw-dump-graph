@@ -36,7 +36,7 @@ use axum::{
     Json, Router,
 };
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use pw_dump_graph_common::frontend;
+use pw_dump_graph_common::{frontend, version_json};
 use rand::{distributions::Alphanumeric, Rng};
 
 /// One stored dump (minified + gzip-compressed) plus when it was created (for TTL).
@@ -362,6 +362,10 @@ async fn main() {
         .route("/", get(frontend).post(create_text).put(create_text))
         .route("/api/dumps", post(create))
         .route("/api/dumps/{key}", get(fetch))
+        .route(
+            "/api/version",
+            get(|| async { version_json("pw-dump-graph-server") }),
+        )
         .fallback(frontend) // embedded/disk frontend + SPA fallback (common crate)
         .layer(DefaultBodyLimit::max(limit))
         .with_state(store.clone());
