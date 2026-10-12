@@ -15,6 +15,7 @@
       <button id="paste-btn" type="button">Paste JSON…</button>
       <button id="hide-meters-btn" type="button" hidden title="Show/hide audio-manager level meters (pavucontrol, GNOME/KDE sound settings)">Show meters</button>
       <button id="share-btn" type="button" disabled>Share…</button>
+      <button id="help-btn" type="button">Help</button>
       <span id="status" class="status"></span>
     </header>
 
@@ -37,6 +38,14 @@
       </form>
       <h3 class="fg-title">filter graph</h3>
       <div class="fg-body"></div>
+    </dialog>
+
+    <dialog id="help-dialog">
+      <form method="dialog">
+        <button class="close" value="close" aria-label="Close">✕</button>
+      </form>
+      <h3>pw-dump-graph</h3>
+      <div class="help-body"></div>
     </dialog>
 
     <dialog id="paste-dialog">
