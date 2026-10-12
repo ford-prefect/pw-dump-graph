@@ -7,6 +7,7 @@ import { buildGraph, withoutMeters, type Graph } from "./model.js";
 import { elkLayout } from "./layout/elk.js";
 import { renderGraph } from "./render/svg.js";
 import { attachInteractions, type View } from "./render/interact.js";
+import { frontendBuild } from "./build.js";
 
 const svg = must<SVGSVGElement>("#canvas");
 const stage = must<HTMLElement>("#stage");
@@ -19,6 +20,9 @@ const pasteArea = must<HTMLTextAreaElement>("#paste-area");
 const pasteLoad = must<HTMLButtonElement>("#paste-load");
 const shareBtn = must<HTMLButtonElement>("#share-btn");
 const hideMetersBtn = must<HTMLButtonElement>("#hide-meters-btn");
+
+// What's running, without taking any space: hover the title.
+must<HTMLElement>("#toolbar .title").title = `pw-dump-graph ${frontendBuild}`;
 
 // The most recently rendered dump text, so Share can POST it to the server.
 let lastDumpText: string | null = null;

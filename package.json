@@ -1,6 +1,6 @@
 {
   "name": "pw-dump-graph",
-  "version": "0.1.0",
+  "private": true,
   "description": "Render pw-dump output as an interactive PipeWire patchbay graph",
   "type": "module",
   "scripts": {
