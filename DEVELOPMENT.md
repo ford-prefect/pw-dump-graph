@@ -99,6 +99,12 @@ git tag vX.Y.Z && git push --tags
 The version in `Cargo.toml` must match the tag, or `dist` refuses to release ("this
 workspace doesn't have anything for dist to Release").
 
+That one version is all there is to bump: the frontend bakes it from `Cargo.toml` at
+build time (`vite.config.ts`), along with the short git commit (`-dirty` when tracked
+files are modified, `unknown` outside a checkout); `package.json` carries no version.
+`common/build.rs` captures the same commit for the binaries, which report it at
+`GET /api/version`, and the Help dialog shows both sides.
+
 Release notes come from `CHANGELOG.md`: `dist` uses the body of the `## [X.Y.Z]` section
 matching the tag (falling back to a download table if there's no match).
 

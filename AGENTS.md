@@ -56,7 +56,9 @@ A Cargo workspace at the repo root; the frontend (`frontend/`, `dist/`) sits alo
 - **`common/`** — the frontend-serving `frontend` axum handler: `rust-embed` of `../dist`
   behind the **`embed`** feature, else `PWG_DIST` disk serving (compiles without `dist/`),
   with SPA fallback + traversal guard. Both binaries embed via `--features embed` (→ one
-  self-contained binary) and depend on this.
+  self-contained binary) and depend on this. Also `build.rs` (git commit at build time,
+  `unknown` without git) and `BUILD`/`version_json()` behind each binary's
+  `GET /api/version`.
 - **`server/`** (binary `pw-dump-graph-server`) — the **share** service: `POST /api/dumps`
   stores a JSON body in memory under a random key (max-count + TTL, **no persistence,
   no auth**); `GET /api/dumps/:key` returns it. Bodies are stored **minified + gzip-compressed**
@@ -98,7 +100,8 @@ in `[workspace.metadata.dist]` (root `Cargo.toml`) + `app/[package.metadata.dist
   `## [Unreleased]` as you go; when cutting a release, rename that heading to the version with a
   date and add a fresh empty `## [Unreleased]`.
 - Cutting a release: bump the workspace `version`, update `CHANGELOG.md`, commit,
-  `git tag vX.Y.Z && git push --tags`.
+  `git tag vX.Y.Z && git push --tags`. That version is the only one — `vite.config.ts` bakes
+  it (and the git commit) into the frontend; `package.json` has none.
 
 ## Conventions
 

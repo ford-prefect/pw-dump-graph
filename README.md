@@ -24,7 +24,8 @@ file…**, by dragging a `pw-dump.json` onto the canvas, or with **Paste JSON…
 **Share…** button uploads whatever is on screen and copies the link.
 
 Anyone with the link can view that dump, and links expire after a while — treat it as a
-pastebin, not storage.
+pastebin, not storage. The **Help** button shows what's running (frontend and server
+versions) and spells out these expectations.
 
 ## View your own graph
 
