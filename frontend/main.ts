@@ -8,6 +8,7 @@ import { elkLayout } from "./layout/elk.js";
 import { renderGraph } from "./render/svg.js";
 import { attachInteractions, type View } from "./render/interact.js";
 import { frontendBuild } from "./build.js";
+import { fetchBackend, helpHTML, type BackendInfo } from "./help.js";
 
 const svg = must<SVGSVGElement>("#canvas");
 const stage = must<HTMLElement>("#stage");
@@ -20,6 +21,9 @@ const pasteArea = must<HTMLTextAreaElement>("#paste-area");
 const pasteLoad = must<HTMLButtonElement>("#paste-load");
 const shareBtn = must<HTMLButtonElement>("#share-btn");
 const hideMetersBtn = must<HTMLButtonElement>("#hide-meters-btn");
+const helpBtn = must<HTMLButtonElement>("#help-btn");
+const helpDialog = must<HTMLDialogElement>("#help-dialog");
+const helpBody = must<HTMLElement>("#help-dialog .help-body");
 
 // What's running, without taking any space: hover the title.
 must<HTMLElement>("#toolbar .title").title = `pw-dump-graph ${frontendBuild}`;
@@ -35,6 +39,9 @@ let hideMeters = true;
 // set after a first Share, and cleared when a different dump loads — so repeated
 // Share clicks reuse the same link instead of minting a new key each time.
 let shareUrl: string | null = null;
+// Which backend (if any) is serving us, probed once at startup — before the graph
+// fetch, because the local viewer's one-shot mode exits right after serving it.
+let backend: BackendInfo | null = null;
 
 function must<T extends Element>(sel: string): T {
   const node = document.querySelector<T>(sel);
@@ -122,6 +129,15 @@ hideMetersBtn.addEventListener("click", () => {
   reflectHideMeters();
   if (lastDumpText) void renderText(lastDumpText, lastSourceLabel, true); // keep pan/zoom
 });
+
+// --- help dialog ---
+helpBtn.addEventListener("click", () => {
+  helpBody.innerHTML = helpHTML(backend, location.origin);
+  helpDialog.showModal();
+});
+helpDialog.onclick = (e) => {
+  if (e.target === helpDialog) helpDialog.close(); // click outside the box dismisses
+};
 
 // --- paste dialog ---
 pasteBtn.addEventListener("click", () => pasteDialog.showModal());
@@ -214,6 +230,7 @@ function startLive(): void {
   const key = params.get("g");
   const url = params.get("url");
   try {
+    backend = await fetchBackend();
     if (key) {
       await loadFromUrl(`/api/dumps/${encodeURIComponent(key)}`);
       shareUrl = location.href; // we're already at the share link; Share just re-copies it

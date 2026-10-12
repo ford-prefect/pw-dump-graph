@@ -2,14 +2,14 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 
-// The workspace Cargo.toml version is the one source of truth; the frontend reads it
-// here at build time rather than keeping a second copy in package.json. A missing
-// version is a real config error, so this fails the build loudly.
-function workspaceVersion(): string {
+// The workspace Cargo.toml is the one source of truth for the version (and repo URL);
+// the frontend reads it here at build time rather than keeping a copy in package.json.
+// A missing field is a real config error, so this fails the build loudly.
+function workspacePackage(key: "version" | "repository"): string {
   const toml = readFileSync(new URL("./Cargo.toml", import.meta.url), "utf8");
   const section = toml.split(/^\[workspace\.package\]\s*$/m)[1] ?? "";
-  const m = /^version\s*=\s*"([^"]+)"/m.exec(section);
-  if (!m) throw new Error("workspace version not found in Cargo.toml [workspace.package]");
+  const m = new RegExp(`^${key}\\s*=\\s*"([^"]+)"`, "m").exec(section);
+  if (!m) throw new Error(`${key} not found in Cargo.toml [workspace.package]`);
   return m[1];
 }
 
@@ -34,8 +34,9 @@ export default defineConfig({
   root: ".",
   publicDir: false,
   define: {
-    __PWG_VERSION__: JSON.stringify(workspaceVersion()),
+    __PWG_VERSION__: JSON.stringify(workspacePackage("version")),
     __PWG_COMMIT__: JSON.stringify(gitCommit()),
+    __PWG_REPO__: JSON.stringify(workspacePackage("repository")),
   },
   build: {
     outDir: "dist",

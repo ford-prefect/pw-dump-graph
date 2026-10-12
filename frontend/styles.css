@@ -275,7 +275,7 @@ dialog menu button {
 
 #filter-graph-dialog { width: min(960px, 94vw); }
 #filter-graph-dialog form { margin: 0; }
-#filter-graph-dialog .close {
+dialog .close {
   position: absolute;
   top: 8px;
   right: 10px;
@@ -298,3 +298,13 @@ dialog menu button {
 .fg-ctrl-k { fill: var(--muted); font-size: 10px; dominant-baseline: middle; }
 .fg-ctrl-v { fill: var(--text); font-size: 10px; dominant-baseline: middle; }
 .fg-edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+
+/* Help dialog: a compact key/value sheet. */
+#help-dialog { width: min(560px, 90vw); }
+#help-dialog form { margin: 0; }
+#help-dialog h3 { margin: 0 0 10px; font-size: 14px; }
+.help { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
+.help dt { color: var(--muted); }
+.help dd { margin: 0; }
+.help code { font-family: ui-monospace, monospace; background: #0f1216; padding: 1px 5px; border-radius: 4px; }
+.help a { color: #8ab4f8; }
