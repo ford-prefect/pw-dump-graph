@@ -17,6 +17,7 @@ pw-dump | curl -sT- https://pw.arunraghavan.net
 | `POST`/`PUT /` | store a piped dump, reply with the share URL as `text/plain` |
 | `POST /api/dumps` | the same, as JSON `{key,url}` (what the **Share…** button uses) |
 | `GET /api/dumps/:key` | the stored dump (`404` once evicted or expired) |
+| `GET /api/version` | `{service, version, commit}` — what's running (the local viewer answers it too) |
 | `GET /` and anything else | the viewer, with SPA fallback |
 
 Bodies must be JSON (`400` otherwise) and within `PWG_BODY_LIMIT` (`413`). Opening
