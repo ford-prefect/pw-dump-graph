@@ -23,7 +23,7 @@ use axum::{
     routing::get,
     Router,
 };
-use pw_dump_graph_common::frontend;
+use pw_dump_graph_common::{frontend, version_json};
 use serde_json::Value;
 use tokio::sync::{watch, Notify};
 
@@ -226,6 +226,10 @@ async fn main() {
     let app = Router::new()
         .route("/api/graph", get(graph))
         .route("/api/events", get(events))
+        .route(
+            "/api/version",
+            get(|| async { version_json("pw-dump-graph") }),
+        )
         .route("/", get(frontend))
         .fallback(frontend)
         .with_state(AppState {

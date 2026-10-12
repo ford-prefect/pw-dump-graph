@@ -6,7 +6,30 @@
 use axum::{
     http::{header::CONTENT_TYPE, StatusCode, Uri},
     response::{IntoResponse, Response},
+    Json,
 };
+
+/// What this build is: the workspace version and the git commit it was built from
+/// (captured by build.rs; "unknown" outside a git checkout). Both binaries report it
+/// at `GET /api/version` so a running instance can be identified.
+pub struct BuildInfo {
+    pub version: &'static str,
+    pub commit: &'static str,
+}
+
+pub const BUILD: BuildInfo = BuildInfo {
+    version: env!("CARGO_PKG_VERSION"),
+    commit: env!("PWG_GIT_COMMIT"),
+};
+
+/// Body for `GET /api/version`: which binary this is, its version, and its commit.
+pub fn version_json(service: &'static str) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "service": service,
+        "version": BUILD.version,
+        "commit": BUILD.commit,
+    }))
+}
 
 /// The built frontend, baked in with the `embed` feature.
 #[cfg(feature = "embed")]
@@ -71,7 +94,17 @@ pub async fn frontend(uri: Uri) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::is_api_path;
+    use super::{is_api_path, version_json, BUILD};
+
+    #[test]
+    fn version_json_reports_build() {
+        assert_eq!(BUILD.version, env!("CARGO_PKG_VERSION"));
+        assert!(!BUILD.commit.is_empty());
+        let v = version_json("pw-dump-graph-test").0;
+        assert_eq!(v["service"], "pw-dump-graph-test");
+        assert_eq!(v["version"], BUILD.version);
+        assert_eq!(v["commit"], BUILD.commit);
+    }
 
     #[test]
     fn api_namespace_is_not_spa_routable() {
